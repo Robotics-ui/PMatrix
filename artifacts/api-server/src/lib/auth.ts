@@ -17,7 +17,7 @@ export function signToken(userId: number, role: string): string {
 }
 
 export function verifyToken(token: string): { sub: number; role: string } {
-  const payload = jwt.verify(token, JWT_SECRET) as { sub: number; role: string };
+  const payload = jwt.verify(token, JWT_SECRET) as unknown as { sub: number; role: string };
   return payload;
 }
 

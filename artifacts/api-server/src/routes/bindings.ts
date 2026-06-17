@@ -3,11 +3,11 @@ import { eq, and } from "drizzle-orm";
 import { db, bindingsTable, subscriptionsTable, slaveAccountsTable, strategiesTable } from "@workspace/db";
 import { CreateBindingBody, DeleteBindingParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
+import { syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
 
 const router = Router();
 
 router.get("/bindings", authenticate, async (req, res): Promise<void> => {
-  // Get all strategies owned by user, then bindings for those strategies
   const userStrategies = await db
     .select()
     .from(strategiesTable)
@@ -86,6 +86,9 @@ router.post("/bindings", authenticate, async (req, res): Promise<void> => {
     })
     .returning();
 
+  // Sync to CopyFactory — push all active bindings for this slave to MetaApi
+  await syncSlaveSubscriberToCopyFactory(slaveAccountId);
+
   res.status(201).json({
     ...binding,
     riskMultiplier: parseFloat(binding.riskMultiplier as string),
@@ -99,7 +102,19 @@ router.delete("/bindings/:id", authenticate, async (req, res): Promise<void> => 
     return;
   }
 
+  // Capture slave account ID before deletion so we can sync CopyFactory after
+  const [existing] = await db
+    .select()
+    .from(bindingsTable)
+    .where(eq(bindingsTable.id, params.data.id));
+
   await db.delete(bindingsTable).where(eq(bindingsTable.id, params.data.id));
+
+  // Sync to CopyFactory — remaining active bindings (may be empty)
+  if (existing) {
+    await syncSlaveSubscriberToCopyFactory(existing.slaveAccountId);
+  }
+
   res.sendStatus(204);
 });
 

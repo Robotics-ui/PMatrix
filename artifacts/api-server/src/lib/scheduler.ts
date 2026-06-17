@@ -1,13 +1,15 @@
 import cron from "node-cron";
-import { eq, inArray, lt } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db, subscriptionsTable, slaveAccountsTable, bindingsTable } from "@workspace/db";
 import { logger } from "./logger";
+import { syncSlaveSubscriberToCopyFactory } from "./metaapi";
 
 /**
  * Auto-suspension scheduler.
  * Runs every 30 minutes. Checks all active subscriptions.
- * If a subscription has expired (endDate passed), mark it expired
- * and suspend all associated slave account bindings.
+ * If a subscription has expired (endDate passed), mark it expired,
+ * suspend all associated slave account bindings in the database, and
+ * push empty subscription lists to CopyFactory so copying stops immediately.
  */
 export function startScheduler(): void {
   cron.schedule("*/30 * * * *", async () => {
@@ -15,7 +17,6 @@ export function startScheduler(): void {
       logger.info("Running subscription expiry check...");
       const now = new Date();
 
-      // Find all active subscriptions that have expired
       const expiredSubs = await db
         .select()
         .from(subscriptionsTable)
@@ -48,15 +49,22 @@ export function startScheduler(): void {
         const slaveIds = slaveAccounts.map((s) => s.id);
 
         if (slaveIds.length > 0) {
-          // Suspend all bindings for these slave accounts
+          // Suspend all bindings in the database
           await db
             .update(bindingsTable)
             .set({ status: "suspended" })
             .where(inArray(bindingsTable.slaveAccountId, slaveIds));
 
+          // Sync each slave to CopyFactory — bindings are now suspended, so
+          // syncSlaveSubscriberToCopyFactory will push an empty subscriptions list
+          // which stops all copying on the MetaApi/CopyFactory side immediately.
+          for (const slave of slaveAccounts) {
+            await syncSlaveSubscriberToCopyFactory(slave.id);
+          }
+
           logger.info(
             { userId: sub.userId, slaveCount: slaveIds.length },
-            "Suspended bindings for expired subscription"
+            "Suspended bindings and synced CopyFactory for expired subscription"
           );
         }
       }

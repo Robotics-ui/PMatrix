@@ -4,6 +4,7 @@ import { db, paymentsTable, subscriptionsTable, adminSettingsTable, bindingsTabl
 import { InitiatePaymentBody } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { logger } from "../lib/logger";
+import { syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
 
 const router = Router();
 
@@ -96,7 +97,7 @@ router.post("/payments", authenticate, async (req, res): Promise<void> => {
   try {
     // Get M-Pesa access token
     const authResponse = await fetch(
-      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
       {
         headers: {
           Authorization: `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`,
@@ -112,7 +113,7 @@ router.post("/payments", authenticate, async (req, res): Promise<void> => {
       .slice(0, 14);
     const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64");
 
-    const stkResponse = await fetch("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
+    const stkResponse = await fetch("https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -169,7 +170,7 @@ router.get("/payments/:checkoutRequestId/status", authenticate, async (req, res)
   const [payment] = await db
     .select()
     .from(paymentsTable)
-    .where(eq(paymentsTable.checkoutRequestId, checkoutRequestId));
+    .where(eq(paymentsTable.checkoutRequestId, checkoutRequestId as string));
 
   if (!payment || payment.userId !== req.userId!) {
     res.status(404).json({ error: "Payment not found" });
@@ -260,7 +261,7 @@ async function activateSubscription(userId: number, days: number): Promise<void>
       })
       .where(eq(subscriptionsTable.userId, userId));
 
-    // Reactivate suspended bindings
+    // Reactivate suspended bindings and sync to CopyFactory
     const userSlaveAccounts = await db
       .select()
       .from(slaveAccountsTable)
@@ -271,6 +272,9 @@ async function activateSubscription(userId: number, days: number): Promise<void>
         .update(bindingsTable)
         .set({ status: "active" })
         .where(eq(bindingsTable.slaveAccountId, slave.id));
+
+      // Push restored subscriptions to CopyFactory
+      await syncSlaveSubscriberToCopyFactory(slave.id);
     }
   }
 }

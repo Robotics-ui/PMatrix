@@ -78,7 +78,7 @@ router.post("/slave-accounts", authenticate, async (req, res): Promise<void> => 
       const accountData = (await accountResponse.json()) as { id?: string };
       if (accountData.id) {
         metaapiAccountId = accountData.id;
-        subscriberId = `sub-${accountData.id}`;
+        subscriberId = accountData.id;
         status = "connected";
       }
     } catch {
