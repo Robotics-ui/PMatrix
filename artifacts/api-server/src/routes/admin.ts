@@ -3,6 +3,7 @@ import { eq, sum, count } from "drizzle-orm";
 import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable } from "@workspace/db";
 import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "@workspace/api-zod";
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
+import { invalidateMetaApiTokenCache } from "../lib/metaapi";
 
 const router = Router();
 
@@ -165,12 +166,13 @@ router.patch("/admin/settings", authenticate, requireAdmin, async (req, res): Pr
   if (parsed.data.dailyFee != null) updates.dailyFee = parsed.data.dailyFee.toString();
   if (parsed.data.minDays != null) updates.minDays = parsed.data.minDays;
   if (parsed.data.maxDays != null) updates.maxDays = parsed.data.maxDays;
+  if ("metaApiToken" in parsed.data) updates.metaApiToken = parsed.data.metaApiToken ?? null;
 
   let settings;
   if (!existing) {
     const [created] = await db
       .insert(adminSettingsTable)
-      .values({ dailyFee: (parsed.data.dailyFee ?? 100).toString(), minDays: parsed.data.minDays ?? 1, maxDays: parsed.data.maxDays ?? 365 })
+      .values({ dailyFee: (parsed.data.dailyFee ?? 100).toString(), minDays: parsed.data.minDays ?? 1, maxDays: parsed.data.maxDays ?? 365, metaApiToken: parsed.data.metaApiToken ?? null })
       .returning();
     settings = created;
   } else {
@@ -181,6 +183,8 @@ router.patch("/admin/settings", authenticate, requireAdmin, async (req, res): Pr
       .returning();
     settings = updated;
   }
+
+  invalidateMetaApiTokenCache();
 
   res.json({ ...settings, dailyFee: parseFloat(settings.dailyFee as string) });
 });

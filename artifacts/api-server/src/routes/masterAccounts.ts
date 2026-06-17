@@ -4,6 +4,7 @@ import { db, masterAccountsTable } from "@workspace/db";
 import { CreateMasterAccountBody, GetMasterAccountParams, DeleteMasterAccountParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { encryptCredential } from "../lib/auth";
+import { getMetaApiToken } from "../lib/metaapi";
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.post("/master-accounts", authenticate, async (req, res): Promise<void> =>
 
   // In production: call MetaApi to create account and get metaapiAccountId
   // For now, store encrypted credentials and simulate MetaApi integration
-  const metaapiToken = process.env.METAAPI_TOKEN;
+  const metaapiToken = await getMetaApiToken();
   let metaapiAccountId: string | null = null;
   let status = "connecting";
 

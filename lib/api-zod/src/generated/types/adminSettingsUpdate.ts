@@ -13,4 +13,5 @@ export interface AdminSettingsUpdate {
   minDays?: number;
   /** @maximum 365 */
   maxDays?: number;
+  metaApiToken?: string | null;
 }

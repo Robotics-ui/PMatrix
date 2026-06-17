@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, CreditCard, Settings, RefreshCw, TrendingUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Shield, Users, CreditCard, Settings, RefreshCw, TrendingUp, AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetAdminSettingsQueryKey } from "@workspace/api-client-react";
 import { useEffect } from "react";
@@ -34,6 +34,8 @@ export default function AdminPage() {
   const [dailyFee, setDailyFee] = useState("");
   const [minDays, setMinDays] = useState("");
   const [maxDays, setMaxDays] = useState("");
+  const [metaApiToken, setMetaApiToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
@@ -41,6 +43,7 @@ export default function AdminPage() {
       setDailyFee(settings.dailyFee ?? "100");
       setMinDays(String(settings.minDays ?? 1));
       setMaxDays(String(settings.maxDays ?? 365));
+      setMetaApiToken(settings.metaApiToken ?? "");
     }
   }, [settings]);
 
@@ -57,7 +60,14 @@ export default function AdminPage() {
 
   const handleSaveSettings = () => {
     setSaveStatus("saving");
-    updateSettings({ data: { dailyFee, minDays: parseInt(minDays), maxDays: parseInt(maxDays) } });
+    updateSettings({
+      data: {
+        dailyFee,
+        minDays: parseInt(minDays),
+        maxDays: parseInt(maxDays),
+        metaApiToken: metaApiToken.trim() || null,
+      },
+    });
   };
 
   const statusBadge = (s?: string) => {
@@ -206,6 +216,29 @@ export default function AdminPage() {
                     <Label>Max Days</Label>
                     <Input type="number" min="1" max="365" value={maxDays} onChange={(e) => setMaxDays(e.target.value)} />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>MetaApi Token</Label>
+                  <div className="relative">
+                    <Input
+                      type={showToken ? "text" : "password"}
+                      placeholder="Paste your MetaApi token here"
+                      value={metaApiToken}
+                      onChange={(e) => setMetaApiToken(e.target.value)}
+                      className="pr-10 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowToken((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Token stored in the database — server picks it up within 30 seconds, no restart needed.
+                    Leave blank to fall back to the <code className="bg-muted px-1 rounded">METAAPI_TOKEN</code> environment variable.
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <Button onClick={handleSaveSettings} className="bg-green-600 hover:bg-green-700" disabled={saveStatus === "saving"}>

@@ -300,6 +300,7 @@ export interface AdminSettings {
   dailyFee: number;
   minDays: number;
   maxDays: number;
+  metaApiToken?: string | null;
   updatedAt?: string;
 }
 
@@ -310,5 +311,6 @@ export interface AdminSettingsUpdate {
   minDays?: number;
   /** @maximum 365 */
   maxDays?: number;
+  metaApiToken?: string | null;
 }
 

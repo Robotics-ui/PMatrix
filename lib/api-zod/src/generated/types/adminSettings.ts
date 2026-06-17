@@ -11,5 +11,6 @@ export interface AdminSettings {
   dailyFee: number;
   minDays: number;
   maxDays: number;
+  metaApiToken?: string | null;
   updatedAt?: Date;
 }

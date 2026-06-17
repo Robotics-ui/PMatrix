@@ -488,6 +488,7 @@ export const GetAdminSettingsResponse = zod.object({
   "dailyFee": zod.number(),
   "minDays": zod.number(),
   "maxDays": zod.number(),
+  "metaApiToken": zod.string().nullish(),
   "updatedAt": zod.coerce.date().optional()
 })
 
@@ -504,7 +505,8 @@ export const updateAdminSettingsBodyMaxDaysMax = 365;
 export const UpdateAdminSettingsBody = zod.object({
   "dailyFee": zod.number().min(1).optional(),
   "minDays": zod.number().min(1).optional(),
-  "maxDays": zod.number().max(updateAdminSettingsBodyMaxDaysMax).optional()
+  "maxDays": zod.number().max(updateAdminSettingsBodyMaxDaysMax).optional(),
+  "metaApiToken": zod.string().nullish()
 })
 
 export const UpdateAdminSettingsResponse = zod.object({
@@ -512,6 +514,7 @@ export const UpdateAdminSettingsResponse = zod.object({
   "dailyFee": zod.number(),
   "minDays": zod.number(),
   "maxDays": zod.number(),
+  "metaApiToken": zod.string().nullish(),
   "updatedAt": zod.coerce.date().optional()
 })
 

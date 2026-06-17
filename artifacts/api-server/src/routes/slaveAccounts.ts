@@ -4,6 +4,7 @@ import { db, slaveAccountsTable, subscriptionsTable } from "@workspace/db";
 import { CreateSlaveAccountBody, DeleteSlaveAccountParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { encryptCredential } from "../lib/auth";
+import { getMetaApiToken } from "../lib/metaapi";
 
 const router = Router();
 
@@ -52,7 +53,7 @@ router.post("/slave-accounts", authenticate, async (req, res): Promise<void> => 
   let subscriberId: string | null = null;
   let status = "connecting";
 
-  const metaapiToken = process.env.METAAPI_TOKEN;
+  const metaapiToken = await getMetaApiToken();
   if (metaapiToken) {
     try {
       // Create MetaApi account

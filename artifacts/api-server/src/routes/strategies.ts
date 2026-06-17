@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db, strategiesTable, masterAccountsTable } from "@workspace/db";
 import { CreateStrategyBody, DeleteStrategyParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
+import { getMetaApiToken } from "../lib/metaapi";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
 
   let copyfactoryStrategyId: string | null = null;
 
-  const metaapiToken = process.env.METAAPI_TOKEN;
+  const metaapiToken = await getMetaApiToken();
   if (metaapiToken && masterAccount.metaapiAccountId) {
     try {
       const stratId = `strategy-${Date.now()}`;

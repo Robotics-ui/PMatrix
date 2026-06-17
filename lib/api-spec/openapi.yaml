@@ -1037,6 +1037,9 @@ components:
           type: integer
         maxDays:
           type: integer
+        metaApiToken:
+          type: string
+          nullable: true
         updatedAt:
           type: string
           format: date-time
@@ -1053,3 +1056,6 @@ components:
         maxDays:
           type: integer
           maximum: 365
+        metaApiToken:
+          type: string
+          nullable: true
