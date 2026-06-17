@@ -1,0 +1,579 @@
+PESAMATRIX V2 - CLOUD TO CLOUD COPY TRADING PLATFORM
+
+STAGE 1: SYSTEM ARCHITECTURE
+
+Build a production-grade cloud-to-cloud copy trading platform using MetaApi CopyFactory.
+
+Mandatory Requirements
+
+- No Redis.
+- No MT5 terminals running on Replit.
+- No VPS.
+- No trade copier EAs.
+- No local MT5 terminals.
+- No signal bridge software.
+
+Required Architecture
+
+User MT5 Account
+↓
+MetaApi Account
+↓
+MetaApi CopyFactory
+↓
+Subscriber MT5 Accounts
+
+All trade copying must be handled by MetaApi CopyFactory.
+
+Replit only manages:
+
+- User accounts
+- Authentication
+- Subscriptions
+- Payments
+- Strategy management
+- Subscriber management
+- Reporting
+
+Replit must never process or relay individual trade events.
+
+---
+
+STAGE 2: TECHNOLOGY STACK
+
+Frontend:
+
+- React
+- TypeScript
+- Tailwind CSS
+
+Backend:
+
+- Node.js
+- Express
+
+Database:
+
+- PostgreSQL
+
+Recommended Database:
+
+- Neon PostgreSQL
+
+ORM:
+
+- Prisma
+
+Authentication:
+
+- JWT
+
+Payments:
+
+- M-Pesa STK Push
+
+Trade Replication:
+
+- MetaApi CopyFactory
+
+Hosting:
+
+- Replit Autoscale Deployment
+
+---
+
+STAGE 3: DATABASE DESIGN
+
+Create the following tables.
+
+users
+
+id
+name
+email
+phone
+password_hash
+role
+created_at
+
+subscriptions
+
+id
+user_id
+status
+start_date
+end_date
+days_paid
+created_at
+
+status values:
+
+- active
+- expired
+- suspended
+
+payments
+
+id
+user_id
+phone
+amount
+mpesa_receipt
+status
+created_at
+
+master_accounts
+
+id
+user_id
+metaapi_account_id
+mt5_login
+broker
+server
+status
+created_at
+
+slave_accounts
+
+id
+user_id
+metaapi_account_id
+subscriber_id
+mt5_login
+broker
+server
+status
+created_at
+
+strategies
+
+id
+user_id
+strategy_id
+strategy_name
+master_account_id
+status
+created_at
+
+strategy_subscribers
+
+id
+strategy_id
+slave_account_id
+risk_multiplier
+status
+created_at
+
+trade_logs
+
+id
+strategy_id
+slave_account_id
+action
+details
+created_at
+
+---
+
+STAGE 4: USER REGISTRATION
+
+Create:
+
+- User Registration
+- Login
+- Forgot Password
+- Profile Page
+
+After registration user enters:
+
+- Full Name
+- Phone Number
+- Email
+- Password
+
+User cannot access copy trading features without active subscription.
+
+---
+
+STAGE 5: MPESA PAYMENT SYSTEM
+
+Implement M-Pesa STK Push.
+
+User enters:
+
+Phone Number
+
+System sends STK Push.
+
+After successful payment:
+
+Create payment record.
+
+Activate subscription.
+
+Subscription Rules
+
+Subscription is daily.
+
+Admin defines:
+
+daily_subscription_fee
+
+Examples:
+
+1 day = KES 100
+5 days = KES 500
+30 days = KES 3000
+
+No subscription plans.
+
+User selects exact number of days.
+
+Use a slider:
+
+Minimum:
+1 day
+
+Maximum:
+365 days
+
+Cost calculation:
+
+selected_days × daily_fee
+
+Display amount before payment.
+
+---
+
+STAGE 6: TRADING DAYS RULE
+
+Trading days are:
+
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+
+Non-trading days:
+
+Saturday
+Sunday
+
+Subscription countdown only decreases on trading days.
+
+Example:
+
+User buys 5 trading days on Friday.
+
+Remaining days:
+
+Friday = Day 1
+
+Weekend ignored
+
+Monday = Day 2
+Tuesday = Day 3
+Wednesday = Day 4
+Thursday = Day 5
+
+Subscription expires after Thursday market close.
+
+---
+
+STAGE 7: MASTER ACCOUNT MODULE
+
+Page:
+
+My Master Accounts
+
+User enters:
+
+Broker
+Server
+MT5 Login
+Investor Password
+
+Backend:
+
+Create MetaApi Account.
+
+Store MetaApi Account ID.
+
+Display account status.
+
+Allow multiple master accounts.
+
+---
+
+STAGE 8: CREATE STRATEGY
+
+Page:
+
+Create Strategy
+
+User selects:
+
+Master Account
+
+Enter:
+
+Strategy Name
+
+System:
+
+Create CopyFactory Strategy.
+
+Store:
+
+strategy_id
+
+Display:
+
+Strategy Name
+Strategy ID
+Status
+
+Allow one user to create multiple strategies.
+
+---
+
+STAGE 9: SLAVE ACCOUNT MODULE
+
+Page:
+
+My Slave Accounts
+
+User enters:
+
+Broker
+Server
+MT5 Login
+Investor Password
+
+Backend:
+
+Create MetaApi Account.
+
+Create CopyFactory Subscriber.
+
+Store:
+
+subscriber_id
+
+Allow unlimited slave accounts.
+
+Target system capacity:
+
+2,000 active slave accounts.
+
+Display:
+
+Broker
+Account Number
+Subscriber ID
+Status
+
+---
+
+STAGE 10: SUBSCRIPTION ENFORCEMENT
+
+Critical Requirement.
+
+Only paid subscribers may receive copied trades.
+
+Before binding subscriber:
+
+Check subscription status.
+
+IF active:
+
+Allow binding.
+
+IF expired:
+
+Reject binding.
+
+Display:
+
+Subscription Required.
+
+---
+
+STAGE 11: BIND SUBSCRIBER TO STRATEGY
+
+Page:
+
+Bind Subscriber
+
+User selects:
+
+Strategy
+
+Slave Account
+
+Risk Multiplier
+
+Examples:
+
+0.5
+1
+2
+3
+
+System:
+
+Bind subscriber to CopyFactory strategy.
+
+Store binding.
+
+Display active bindings.
+
+---
+
+STAGE 12: AUTO SUSPENSION
+
+Create scheduled job.
+
+Run every 30 minutes.
+
+Check all subscriptions.
+
+If subscription expired:
+
+Unbind all subscriber accounts.
+
+Disable trade copying.
+
+Update status:
+
+expired
+
+User immediately stops receiving copied trades.
+
+No manual intervention required.
+
+---
+
+STAGE 13: AUTO REACTIVATION
+
+After successful M-Pesa payment:
+
+Activate subscription.
+
+Re-enable existing bindings.
+
+User resumes receiving copied trades automatically.
+
+---
+
+STAGE 14: ADMIN DASHBOARD
+
+Admin can:
+
+View users.
+
+View subscriptions.
+
+View payments.
+
+View strategies.
+
+View slave accounts.
+
+View active bindings.
+
+View revenue.
+
+View active subscriber count.
+
+Set:
+
+Daily subscription fee.
+
+Minimum subscription days.
+
+Maximum subscription days.
+
+Suspend users.
+
+Activate users.
+
+---
+
+STAGE 15: USER DASHBOARD
+
+Display:
+
+Subscription Status
+
+Remaining Trading Days
+
+Active Strategies
+
+Active Slave Accounts
+
+Active Bindings
+
+Recent Payments
+
+Recent Trade Activity
+
+---
+
+STAGE 16: SCALABILITY TARGET
+
+System must support:
+
+- 2,000 active slave accounts
+- 500 concurrent users
+- Multiple strategies
+- Multiple master accounts
+- Multiple slave accounts per user
+
+Trade replication must be handled entirely by MetaApi CopyFactory.
+
+Database workload must remain limited to:
+
+Users
+Payments
+Subscriptions
+Strategies
+Bindings
+
+No trade-copy processing inside Replit.
+
+---
+
+STAGE 17: SECURITY
+
+Encrypt sensitive credentials.
+
+Use JWT authentication.
+
+Use HTTPS only.
+
+Store passwords using bcrypt.
+
+Validate all API inputs.
+
+Use Prisma migrations.
+
+Enable audit logging.
+
+---
+
+FINAL REQUIREMENT
+
+The platform must be production-ready.
+
+Copy trading must remain fully cloud-to-cloud through MetaApi CopyFactory.
+
+Replit acts only as:
+
+- Subscription manager
+- Payment manager
+- User manager
+- Strategy manager
+
+Replit must never execute or distribute trades itself.
