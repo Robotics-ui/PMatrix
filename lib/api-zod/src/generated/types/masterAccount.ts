@@ -16,5 +16,9 @@ export interface MasterAccount {
   broker: string;
   server: string;
   status: MasterAccountStatus;
+  /** @nullable */
+  deploymentStatus?: string | null;
+  /** @nullable */
+  connectionStatus?: string | null;
   createdAt: Date;
 }

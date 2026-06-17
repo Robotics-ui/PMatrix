@@ -11,6 +11,8 @@ export const masterAccountsTable = pgTable("master_accounts", {
   server: text("server").notNull(),
   investorPasswordEncrypted: text("investor_password_encrypted").notNull(),
   status: text("status").notNull().default("connecting"),
+  deploymentStatus: text("deployment_status"),
+  connectionStatus: text("connection_status"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1241,6 +1241,83 @@ export const useDeleteMasterAccount = <TError = ErrorType<unknown>,
       return useMutation(getDeleteMasterAccountMutationOptions(options));
     }
 
+export const getRefreshMasterAccountStatusUrl = (id: number,) => {
+
+
+
+
+  return `/api/master-accounts/${id}/refresh-status`
+}
+
+/**
+ * @summary Fetch real deployment and connection status from MetaApi and update the record
+ */
+export const refreshMasterAccountStatus = async (id: number, options?: RequestInit): Promise<MasterAccount> => {
+
+  return customFetch<MasterAccount>(getRefreshMasterAccountStatusUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshMasterAccountStatusQueryKey = (id: number,) => {
+    return [
+    `/api/master-accounts/${id}/refresh-status`
+    ] as const;
+    }
+
+
+export const getRefreshMasterAccountStatusQueryOptions = <TData = Awaited<ReturnType<typeof refreshMasterAccountStatus>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof refreshMasterAccountStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRefreshMasterAccountStatusQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof refreshMasterAccountStatus>>> = ({ signal }) => refreshMasterAccountStatus(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof refreshMasterAccountStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type RefreshMasterAccountStatusQueryResult = NonNullable<Awaited<ReturnType<typeof refreshMasterAccountStatus>>>
+export type RefreshMasterAccountStatusQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Fetch real deployment and connection status from MetaApi and update the record
+ */
+
+export function useRefreshMasterAccountStatus<TData = Awaited<ReturnType<typeof refreshMasterAccountStatus>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof refreshMasterAccountStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getRefreshMasterAccountStatusQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getListSlaveAccountsUrl = () => {
 
 

@@ -342,6 +342,31 @@ paths:
         "204":
           description: Deleted
 
+  /master-accounts/{id}/refresh-status:
+    get:
+      operationId: refreshMasterAccountStatus
+      tags: [masterAccounts]
+      summary: Fetch real deployment and connection status from MetaApi and update the record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated master account with live MetaApi status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MasterAccount"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # SLAVE ACCOUNTS
   /slave-accounts:
     get:
@@ -881,7 +906,11 @@ components:
           type: string
         status:
           type: string
-          enum: [connecting, connected, disconnected, error]
+          enum: [deploying, connecting, connected, disconnected, error]
+        deploymentStatus:
+          type: ["string", "null"]
+        connectionStatus:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time

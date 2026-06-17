@@ -164,6 +164,7 @@ export type MasterAccountStatus = typeof MasterAccountStatus[keyof typeof Master
 
 
 export const MasterAccountStatus = {
+  deploying: 'deploying',
   connecting: 'connecting',
   connected: 'connected',
   disconnected: 'disconnected',
@@ -179,6 +180,10 @@ export interface MasterAccount {
   broker: string;
   server: string;
   status: MasterAccountStatus;
+  /** @nullable */
+  deploymentStatus?: string | null;
+  /** @nullable */
+  connectionStatus?: string | null;
   createdAt: string;
 }
 

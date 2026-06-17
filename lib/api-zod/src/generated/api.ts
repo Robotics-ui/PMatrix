@@ -202,7 +202,9 @@ export const ListMasterAccountsResponseItem = zod.object({
   "mt5Login": zod.string(),
   "broker": zod.string(),
   "server": zod.string(),
-  "status": zod.enum(['connecting', 'connected', 'disconnected', 'error']),
+  "status": zod.enum(['deploying', 'connecting', 'connected', 'disconnected', 'error']),
+  "deploymentStatus": zod.string().nullish(),
+  "connectionStatus": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMasterAccountsResponse = zod.array(ListMasterAccountsResponseItem)
@@ -233,7 +235,9 @@ export const GetMasterAccountResponse = zod.object({
   "mt5Login": zod.string(),
   "broker": zod.string(),
   "server": zod.string(),
-  "status": zod.enum(['connecting', 'connected', 'disconnected', 'error']),
+  "status": zod.enum(['deploying', 'connecting', 'connected', 'disconnected', 'error']),
+  "deploymentStatus": zod.string().nullish(),
+  "connectionStatus": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -243,6 +247,27 @@ export const GetMasterAccountResponse = zod.object({
  */
 export const DeleteMasterAccountParams = zod.object({
   "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Fetch real deployment and connection status from MetaApi and update the record
+ */
+export const RefreshMasterAccountStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RefreshMasterAccountStatusResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "metaapiAccountId": zod.string().nullish(),
+  "mt5Login": zod.string(),
+  "broker": zod.string(),
+  "server": zod.string(),
+  "status": zod.enum(['deploying', 'connecting', 'connected', 'disconnected', 'error']),
+  "deploymentStatus": zod.string().nullish(),
+  "connectionStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
 })
 
 

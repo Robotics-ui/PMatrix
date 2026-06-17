@@ -10,6 +10,7 @@ export type MasterAccountStatus = typeof MasterAccountStatus[keyof typeof Master
 
 
 export const MasterAccountStatus = {
+  deploying: 'deploying',
   connecting: 'connecting',
   connected: 'connected',
   disconnected: 'disconnected',
