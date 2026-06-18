@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import {
   TrendingUp,
@@ -14,6 +15,10 @@ import {
   ExternalLink,
   ArrowRight,
   ChevronRight,
+  Minus,
+  Plus,
+  Loader2,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +39,14 @@ const steps = [
   { num: "03", title: "Start Copying Trades", desc: "Link your MT5 slave account to an approved master and watch trades copy automatically." },
 ];
 
+const presets = [1, 5, 10, 20, 30];
+
+interface Pricing {
+  dailyFee: number;
+  minDays: number;
+  maxDays: number;
+}
+
 function TikTokIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -42,7 +55,169 @@ function TikTokIcon({ className }: { className?: string }) {
   );
 }
 
+function PricingSection({ pricing, isLoading }: { pricing: Pricing | null; isLoading: boolean }) {
+  const dailyFee = pricing?.dailyFee ?? 100;
+  const minDays = pricing?.minDays ?? 1;
+  const maxDays = pricing?.maxDays ?? 365;
+  const [days, setDays] = useState(minDays);
+
+  // Keep days within bounds whenever pricing loads
+  useEffect(() => {
+    setDays((d) => Math.max(minDays, Math.min(maxDays, d)));
+  }, [minDays, maxDays]);
+
+  const total = days * dailyFee;
+
+  const clamp = (v: number) => Math.max(minDays, Math.min(maxDays, v));
+
+  return (
+    <section id="pricing" className="py-20 border-t border-border bg-card/30">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-12">
+          <Badge className="mb-4 bg-blue-600/20 text-blue-400 border-blue-600/30 hover:bg-blue-600/20">
+            Pricing
+          </Badge>
+          <h2 className="text-3xl font-bold text-foreground">Simple, transparent pricing</h2>
+          <p className="text-muted-foreground mt-3 text-sm max-w-xl mx-auto">
+            Pay only for the trading days you need. No hidden fees, no monthly locks.
+          </p>
+        </div>
+
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Daily rate banner */}
+          <div className="flex items-center justify-between p-5 rounded-xl bg-blue-600/10 border border-blue-600/25">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-600/20 border border-blue-600/30 flex items-center justify-center">
+                <Tag className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Daily rate</p>
+                {isLoading ? (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold text-blue-400">
+                    KES {dailyFee.toLocaleString()}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">/ trading day</span>
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="text-right hidden sm:block">
+              <p className="text-xs text-muted-foreground">Subscription range</p>
+              <p className="text-sm font-medium text-foreground">
+                {minDays} – {maxDays} days
+              </p>
+            </div>
+          </div>
+
+          {/* Calculator */}
+          <div className="p-6 rounded-xl bg-card border border-border space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-foreground">How many trading days?</p>
+                <span className="text-sm font-bold text-blue-400">{days} {days === 1 ? "day" : "days"}</span>
+              </div>
+
+              {/* Stepper */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDays(clamp(days - 1))}
+                  disabled={days <= minDays}
+                  className="h-9 w-9 rounded-lg border border-border bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <div className="flex-1 relative">
+                  <input
+                    type="range"
+                    min={minDays}
+                    max={maxDays}
+                    value={days}
+                    onChange={(e) => setDays(Number(e.target.value))}
+                    className="w-full h-2 rounded-full appearance-none cursor-pointer accent-blue-600 bg-muted"
+                  />
+                </div>
+                <button
+                  onClick={() => setDays(clamp(days + 1))}
+                  disabled={days >= maxDays}
+                  className="h-9 w-9 rounded-lg border border-border bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Preset chips */}
+              <div className="flex flex-wrap gap-2 mt-4">
+                {presets.filter((p) => p >= minDays && p <= maxDays).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setDays(p)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                      days === p
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "bg-muted/40 border-border text-muted-foreground hover:border-blue-600/40 hover:text-foreground"
+                    }`}
+                  >
+                    {p} {p === 1 ? "day" : "days"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total */}
+            <div className="flex items-center justify-between pt-4 border-t border-border">
+              <div>
+                <p className="text-xs text-muted-foreground">Total cost</p>
+                <p className="text-3xl font-black text-foreground">
+                  KES {isLoading ? "—" : total.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {days} {days === 1 ? "day" : "days"} × KES {dailyFee.toLocaleString()} = KES {isLoading ? "—" : total.toLocaleString()}
+                </p>
+              </div>
+              <Link href="/register">
+                <Button className="bg-green-600 hover:bg-green-700 text-white shrink-0">
+                  Subscribe Now
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* What you get */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { icon: CheckCircle2, label: "No hidden fees", color: "text-green-400" },
+              { icon: CheckCircle2, label: "Instant M-Pesa activation", color: "text-green-400" },
+              { icon: CheckCircle2, label: "Cancel anytime", color: "text-green-400" },
+            ].map(({ icon: Icon, label, color }) => (
+              <div key={label} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border">
+                <Icon className={`h-4 w-4 ${color} shrink-0`} />
+                <span className="text-xs text-muted-foreground">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
+  const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/pricing")
+      .then((r) => r.json())
+      .then((data: Pricing) => setPricing(data))
+      .catch(() => setPricing({ dailyFee: 100, minDays: 1, maxDays: 365 }))
+      .finally(() => setPricingLoading(false));
+  }, []);
+
   return (
     <div className="dark min-h-screen bg-background text-foreground">
 
@@ -58,6 +233,7 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-foreground transition-colors">How it Works</a>
+            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
             <a href="#contact" className="hover:text-foreground transition-colors">Contact</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -99,11 +275,18 @@ export default function LandingPage() {
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </Link>
-            <Link href="/login">
+            <a href="#pricing">
               <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-muted px-8 w-full sm:w-auto">
-                Sign In to Dashboard
+                {pricingLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    See Pricing
+                  </>
+                ) : (
+                  <>KES {(pricing?.dailyFee ?? 100).toLocaleString()} / day — See Pricing</>
+                )}
               </Button>
-            </Link>
+            </a>
           </div>
 
           {/* Stats strip */}
@@ -147,7 +330,6 @@ export default function LandingPage() {
                 <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
               </div>
             ))}
-            {/* Filler card */}
             <div className="p-5 rounded-xl bg-gradient-to-br from-blue-600/10 to-green-600/10 border border-blue-600/20 flex flex-col items-start justify-between">
               <CheckCircle2 className="h-10 w-10 text-green-400 mb-4" />
               <div>
@@ -201,6 +383,9 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Pricing — live from API */}
+      <PricingSection pricing={pricing} isLoading={pricingLoading} />
+
       {/* Contact */}
       <section id="contact" className="py-20 border-t border-border">
         <div className="max-w-6xl mx-auto px-6">
@@ -212,7 +397,6 @@ export default function LandingPage() {
             <p className="text-muted-foreground mt-3 text-sm">We are available via phone, WhatsApp, and TikTok.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
-            {/* Phone */}
             <a
               href="tel:+254717434943"
               className="flex flex-col items-center gap-3 p-6 rounded-xl bg-card border border-border hover:border-blue-600/40 hover:bg-blue-600/5 transition-all group text-center"
@@ -226,8 +410,6 @@ export default function LandingPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">+254 781 585 319</p>
               </div>
             </a>
-
-            {/* WhatsApp */}
             <a
               href="https://wa.me/254717434943"
               className="flex flex-col items-center gap-3 p-6 rounded-xl bg-card border border-border hover:border-green-600/40 hover:bg-green-600/5 transition-all group text-center"
@@ -241,8 +423,6 @@ export default function LandingPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Chat with us directly</p>
               </div>
             </a>
-
-            {/* TikTok */}
             <a
               href="https://tiktok.com/@pesamatrixsignals"
               target="_blank"
@@ -268,23 +448,20 @@ export default function LandingPage() {
       <footer className="border-t border-border bg-card/40 py-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            {/* Brand */}
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
                 <TrendingUp className="h-4 w-4 text-white" />
               </div>
               <span className="text-sm font-bold tracking-tight">PESAMATRIX</span>
             </div>
-
-            {/* Links */}
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
               <Link href="/login" className="hover:text-foreground transition-colors">Sign In</Link>
               <Link href="/register" className="hover:text-foreground transition-colors">Register</Link>
               <a href="#features" className="hover:text-foreground transition-colors">Features</a>
               <a href="#how-it-works" className="hover:text-foreground transition-colors">How it Works</a>
+              <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
+              <a href="#contact" className="hover:text-foreground transition-colors">Contact</a>
             </div>
-
-            {/* Contact strip */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <a href="tel:+254717434943" className="hover:text-blue-400 transition-colors">+254717434943</a>
               <a href="https://wa.me/254717434943" className="hover:text-green-400 transition-colors">WhatsApp</a>
@@ -298,7 +475,6 @@ export default function LandingPage() {
               </a>
             </div>
           </div>
-
           <div className="mt-6 pt-6 border-t border-border text-center text-xs text-muted-foreground">
             PesaMatrix — Secure, Automated, Professional Copy Trading
           </div>

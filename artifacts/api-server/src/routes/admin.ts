@@ -11,6 +11,20 @@ import { decryptCredential } from "../lib/auth";
 
 const router = Router();
 
+// Public pricing endpoint — no auth required (used by landing page)
+router.get("/pricing", async (_req, res): Promise<void> => {
+  const [settings] = await db
+    .select({ dailyFee: adminSettingsTable.dailyFee, minDays: adminSettingsTable.minDays, maxDays: adminSettingsTable.maxDays })
+    .from(adminSettingsTable)
+    .orderBy(adminSettingsTable.id)
+    .limit(1);
+  if (!settings) {
+    res.json({ dailyFee: 100, minDays: 1, maxDays: 365 });
+    return;
+  }
+  res.json({ dailyFee: parseFloat(settings.dailyFee as string), minDays: settings.minDays, maxDays: settings.maxDays });
+});
+
 router.get("/admin/stats", authenticate, requireAdmin, async (_req, res): Promise<void> => {
   const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
   const [activeSubsResult] = await db
