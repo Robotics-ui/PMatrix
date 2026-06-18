@@ -59,17 +59,18 @@ router.post("/payments", authenticate, async (req, res): Promise<void> => {
     normalizedPhone = "254" + normalizedPhone;
   }
 
-  // Check if MPESA credentials are configured
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-  const passkey = process.env.MPESA_PASSKEY;
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const callbackUrl = process.env.MPESA_CALLBACK_URL;
+  // Check if MPESA credentials are configured — trim all values to strip hidden whitespace/newlines
+  const consumerKey = process.env.MPESA_CONSUMER_KEY?.trim();
+  const consumerSecret = process.env.MPESA_CONSUMER_SECRET?.trim();
+  const passkey = process.env.MPESA_PASSKEY?.trim();
+  const shortcode = process.env.MPESA_SHORTCODE?.trim();
+  const callbackUrl = process.env.MPESA_CALLBACK_URL?.trim();
 
   // Log callback URL at runtime so it can be verified in logs
   logger.info(
     {
       MPESA_CALLBACK_URL: callbackUrl ?? "NOT_SET",
+      callbackUrlLength: callbackUrl?.length ?? 0,
     },
     "MPESA env check"
   );
