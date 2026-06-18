@@ -17,6 +17,8 @@ import {
   BookOpen,
   Bell,
   Image,
+  Info,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +33,8 @@ const navItems = [
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/resources", label: "Resources", icon: BookOpen },
   { href: "/announcements", label: "Announcements", icon: Bell },
+  { href: "/about", label: "About Us", icon: Info },
+  { href: "/contacts", label: "Contacts", icon: Phone },
 ];
 
 const adminNavItems = [

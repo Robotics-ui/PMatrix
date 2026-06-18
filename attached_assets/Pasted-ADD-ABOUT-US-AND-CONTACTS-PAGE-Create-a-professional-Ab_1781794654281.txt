@@ -1,0 +1,155 @@
+ADD ABOUT US AND CONTACTS PAGE
+
+Create a professional About Us and Contacts section for PesaMatrix.
+
+Add a new menu item:
+
+- About Us
+- Contacts
+
+Both should be accessible from the main navigation menu and footer.
+
+---
+
+ABOUT US PAGE
+
+Create a modern About Us page containing:
+
+Company Overview
+
+PesaMatrix is a cloud-to-cloud copy trading platform designed to connect professional traders and subscribers through secure automated trade replication.
+
+The platform enables approved master traders to share trading signals while subscribers automatically copy trades into their MT5 accounts through MetaApi CopyFactory technology.
+
+Mission
+
+To provide reliable, transparent and accessible copy trading solutions for traders worldwide.
+
+Vision
+
+To become a trusted global copy trading ecosystem connecting successful traders with investors through secure automation.
+
+Features
+
+- Cloud-to-cloud copy trading
+- MetaApi CopyFactory integration
+- M-Pesa subscription payments
+- Admin-approved signal providers
+- Automated subscriber management
+- Trading education resources
+- Market news and announcements
+
+---
+
+CONTACTS PAGE
+
+Create a dedicated Contacts page.
+
+Display the following contact methods:
+
+Phone Numbers
+
+Primary:
+
++254717434943
+
+Secondary:
+
++254781585319
+
+Requirements:
+
+- Numbers must be clickable.
+- Clicking should open the phone dialer on mobile devices.
+- Use tel: links.
+
+Examples:
+
+tel:+254717434943
+
+tel:+254781585319
+
+---
+
+WhatsApp
+
+WhatsApp Number:
+
++254717434943
+
+Requirements:
+
+- Must be clickable.
+- Open WhatsApp chat directly.
+
+Use:
+
+https://wa.me/254717434943
+
+Display:
+
+"Chat with us on WhatsApp"
+
+---
+
+TikTok
+
+TikTok:
+
+tiktok.com/@pesamatrixsignals
+
+Requirements:
+
+- Must be clickable.
+- Open in a new browser tab.
+- Display TikTok icon.
+
+Use:
+
+https://tiktok.com/@pesamatrixsignals
+
+---
+
+CONTACT CARD DESIGN
+
+Create professional contact cards showing:
+
+- Phone icon
+- WhatsApp icon
+- TikTok icon
+
+Include hover animations and mobile responsiveness.
+
+---
+
+FOOTER INTEGRATION
+
+Add the following to the website footer:
+
+Phone:
++254717434943
+
+WhatsApp:
++254717434943
+
+TikTok:
+@pesamatrixsignals
+
+All links must remain clickable.
+
+---
+
+MOBILE RESPONSIVENESS
+
+Ensure all contact links work correctly on:
+
+- Android
+- iPhone
+- Tablets
+- Desktop browsers
+
+---
+
+FINAL REQUIREMENT
+
+Implement the About Us and Contacts pages with modern styling, responsive design, clickable phone numbers, clickable WhatsApp chat, and clickable TikTok profile links.
