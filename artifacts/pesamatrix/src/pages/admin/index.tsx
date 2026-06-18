@@ -18,6 +18,8 @@ import {
   useGetBannerSettings,
   useUpdateBannerSettings,
   getGetBannerSettingsQueryKey,
+  useGetForexRates,
+  getGetForexRatesQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -709,6 +711,26 @@ function BannerSettingsTab() {
     }
   }, [settings]);
 
+  const { data: ratesData } = useGetForexRates({
+    query: { queryKey: getGetForexRatesQueryKey(), refetchInterval: 15_000, retry: 1 },
+  });
+
+  const SAMPLE_RATES = [
+    { pair: "EUR/USD", midPrice: 1.08542, bid: 1.08536, ask: 1.08548, spread: 0.00012, change: 0.00023, changePercent: 0.021, direction: "up" },
+    { pair: "GBP/USD", midPrice: 1.26731, bid: 1.26724, ask: 1.26738, spread: 0.00015, change: -0.00156, changePercent: -0.123, direction: "down" },
+    { pair: "USD/JPY", midPrice: 149.823, bid: 149.808, ask: 149.838, spread: 0.015, change: 0.234, changePercent: 0.156, direction: "up" },
+    { pair: "USD/CHF", midPrice: 0.90124, bid: 0.90106, ask: 0.90142, spread: 0.00018, change: -0.00043, changePercent: -0.048, direction: "down" },
+    { pair: "AUD/USD", midPrice: 0.64872, bid: 0.64857, ask: 0.64887, spread: 0.00015, change: 0.00112, changePercent: 0.173, direction: "up" },
+    { pair: "NZD/USD", midPrice: 0.59341, bid: 0.59326, ask: 0.59356, spread: 0.00025, change: -0.00074, changePercent: -0.124, direction: "down" },
+    { pair: "USD/CAD", midPrice: 1.36218, bid: 1.36198, ask: 1.36238, spread: 0.00020, change: 0.00142, changePercent: 0.104, direction: "up" },
+    { pair: "EUR/GBP", midPrice: 0.85682, bid: 0.85664, ask: 0.85700, spread: 0.00018, change: -0.00021, changePercent: -0.024, direction: "down" },
+    { pair: "EUR/JPY", midPrice: 162.543, bid: 162.518, ask: 162.568, spread: 0.025, change: 0.312, changePercent: 0.192, direction: "up" },
+    { pair: "GBP/JPY", midPrice: 189.721, bid: 189.691, ask: 189.751, spread: 0.030, change: -0.187, changePercent: -0.099, direction: "down" },
+  ];
+
+  const allRates = (ratesData?.rates?.length ? ratesData.rates : SAMPLE_RATES) as typeof SAMPLE_RATES;
+  const previewRates = allRates.filter((r) => form.selectedPairs.includes(r.pair));
+
   const { mutate: save } = useUpdateBannerSettings({
     mutation: {
       onSuccess: () => {
@@ -746,8 +768,163 @@ function BannerSettingsTab() {
     );
   }
 
+  const previewItems = previewRates.length > 0 ? previewRates : SAMPLE_RATES.slice(0, 5);
+  const previewDuped = [...previewItems, ...previewItems];
+
   return (
     <div className="space-y-6">
+      {/* Live Preview */}
+      <Card className="border-border overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Eye className="h-4 w-4 text-blue-400" />
+            Live Preview
+          </CardTitle>
+          <CardDescription>
+            Updates instantly as you change settings below
+            {!ratesData && <span className="ml-1 text-amber-400/70">(showing sample data)</span>}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Simulated browser chrome */}
+          <div className="mx-4 mb-4 rounded-lg overflow-hidden border border-white/10">
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-white/5 border-b border-white/10">
+              <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
+              <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60" />
+              <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
+              <div className="ml-2 flex-1 rounded bg-white/5 px-3 py-0.5 text-[10px] text-white/30 font-mono">
+                pesamatrix.app/dashboard
+              </div>
+            </div>
+            {/* Banner preview */}
+            {!form.enabled ? (
+              <div
+                className="flex items-center justify-center text-xs text-white/30 italic"
+                style={{ height: 48, backgroundColor: "#0a0f1e" }}
+              >
+                Banner is disabled — not shown to users
+              </div>
+            ) : (
+              <div
+                className="w-full flex items-center border-b border-white/10 overflow-hidden"
+                style={{
+                  backgroundColor: form.backgroundColor,
+                  color: form.textColor,
+                  fontFamily: form.fontFamily,
+                  height: form.displayMode === "cards" ? "auto" : form.bannerHeight,
+                  minHeight: form.displayMode === "cards" ? 110 : form.bannerHeight,
+                }}
+              >
+                {/* Market status badge */}
+                <div className="flex items-center gap-1.5 shrink-0 px-3 border-r border-white/10">
+                  <span
+                    className="h-2 w-2 rounded-full animate-pulse"
+                    style={{ backgroundColor: form.bullishColor, boxShadow: `0 0 6px ${form.bullishColor}` }}
+                  />
+                  <span className="text-[11px] font-semibold tracking-wider whitespace-nowrap" style={{ color: form.bullishColor }}>
+                    MARKET OPEN
+                  </span>
+                </div>
+
+                {form.displayMode === "ticker" && (
+                  <div className="overflow-hidden flex-1 flex items-center">
+                    <style>{`
+                      @keyframes preview-ticker-scroll {
+                        0%   { transform: translateX(0); }
+                        100% { transform: translateX(-50%); }
+                      }
+                      .preview-ticker-track {
+                        animation: preview-ticker-scroll ${form.tickerSpeed}s linear infinite;
+                        will-change: transform;
+                      }
+                      .preview-ticker-track:hover { animation-play-state: paused; }
+                    `}</style>
+                    <div className="preview-ticker-track flex items-center">
+                      {previewDuped.map((r, i) => {
+                        const color = r.direction === "up" ? form.bullishColor : r.direction === "down" ? form.bearishColor : "#9ca3af";
+                        const sign = r.changePercent >= 0 ? "+" : "";
+                        return (
+                          <div
+                            key={`${r.pair}-${i}`}
+                            className="flex items-center gap-2 px-4 border-r border-white/10"
+                            style={{ fontSize: form.fontSize }}
+                          >
+                            <span className="font-semibold tracking-wide whitespace-nowrap" style={{ color: form.textColor }}>
+                              {r.pair}
+                            </span>
+                            <span className="font-mono font-bold whitespace-nowrap" style={{ color: form.textColor }}>
+                              {r.midPrice.toFixed(r.pair.includes("JPY") ? 3 : 5)}
+                            </span>
+                            <span className="text-[11px] whitespace-nowrap" style={{ color }}>
+                              {r.direction === "up" ? "▲" : r.direction === "down" ? "▼" : "–"}
+                              {" "}{sign}{r.changePercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {form.displayMode === "compact" && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 flex-1 overflow-hidden">
+                    {previewItems.map((r) => {
+                      const color = r.direction === "up" ? form.bullishColor : r.direction === "down" ? form.bearishColor : "#9ca3af";
+                      return (
+                        <span key={r.pair} className="flex items-center gap-1 whitespace-nowrap" style={{ fontSize: form.fontSize }}>
+                          <span className="text-xs" style={{ color: form.textColor, opacity: 0.7 }}>{r.pair}</span>
+                          <span className="font-mono font-semibold" style={{ color: form.textColor }}>
+                            {r.midPrice.toFixed(r.pair.includes("JPY") ? 3 : 5)}
+                          </span>
+                          <span style={{ color }} className="text-[11px]">
+                            {r.direction === "up" ? "▲" : r.direction === "down" ? "▼" : "–"}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {form.displayMode === "cards" && (
+                  <div className="w-full overflow-x-auto">
+                    <div className="flex gap-3 p-3">
+                      {previewItems.map((r) => {
+                        const color = r.direction === "up" ? form.bullishColor : r.direction === "down" ? form.bearishColor : "#9ca3af";
+                        const sign = r.changePercent >= 0 ? "+" : "";
+                        return (
+                          <div
+                            key={r.pair}
+                            className="shrink-0 rounded-lg border border-white/10 p-3"
+                            style={{ backgroundColor: "rgba(255,255,255,0.05)", minWidth: 130, fontSize: form.fontSize }}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="font-semibold text-xs tracking-wide" style={{ color: form.textColor }}>{r.pair}</span>
+                              <span style={{ color }}>{r.direction === "up" ? "▲" : r.direction === "down" ? "▼" : "–"}</span>
+                            </div>
+                            <div className="font-mono font-bold text-sm mb-1" style={{ color: form.textColor }}>
+                              {r.midPrice.toFixed(r.pair.includes("JPY") ? 3 : 5)}
+                            </div>
+                            <div className="text-xs font-semibold" style={{ color }}>
+                              {sign}{r.changePercent.toFixed(2)}%
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Simulated page content below banner */}
+            <div className="flex gap-3 p-4 bg-[#0d1117]">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex-1 h-10 rounded-md bg-white/5 border border-white/5" />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
