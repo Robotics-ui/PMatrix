@@ -15,6 +15,9 @@ import {
   useApproveMasterAccount,
   useRejectMasterAccount,
   getListAdminMasterAccountsQueryKey,
+  useGetBannerSettings,
+  useUpdateBannerSettings,
+  getGetBannerSettingsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,12 +28,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Shield, Users, CreditCard, Settings, RefreshCw, TrendingUp, AlertCircle,
   CheckCircle2, Eye, EyeOff, Webhook, Copy, Check, XCircle, Activity,
-  Clock, Zap, AlertTriangle, Link2, Link2Off, RotateCcw, Server, ThumbsUp, ThumbsDown,
+  Clock, Zap, AlertTriangle, Link2, Link2Off, RotateCcw, Server, ThumbsUp, ThumbsDown, Radio,
 } from "lucide-react";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetAdminSettingsQueryKey } from "@workspace/api-client-react";
+
+const ALL_PAIRS_LIST = ["EUR/USD","GBP/USD","USD/JPY","USD/CHF","AUD/USD","NZD/USD","USD/CAD","EUR/GBP","EUR/JPY","GBP/JPY"];
 
 function StatusRow({ label, ok, optional = false }: { label: string; ok: boolean; optional?: boolean }) {
   return (
@@ -640,6 +646,322 @@ function MasterApprovalsTab() {
   );
 }
 
+function BannerSettingsTab() {
+  const qc = useQueryClient();
+  const { data: settings, isLoading } = useGetBannerSettings({
+    query: { queryKey: getGetBannerSettingsQueryKey() },
+  });
+
+  type FormState = {
+    enabled: boolean;
+    displayMode: string;
+    backgroundColor: string;
+    primaryColor: string;
+    secondaryColor: string;
+    textColor: string;
+    bullishColor: string;
+    bearishColor: string;
+    fontFamily: string;
+    fontSize: number;
+    bannerHeight: number;
+    tickerSpeed: number;
+    refreshRate: number;
+    selectedPairs: string[];
+  };
+
+  const [form, setForm] = useState<FormState>({
+    enabled: true,
+    displayMode: "ticker",
+    backgroundColor: "#0a0f1e",
+    primaryColor: "#2563eb",
+    secondaryColor: "#16a34a",
+    textColor: "#f1f5f9",
+    bullishColor: "#16a34a",
+    bearishColor: "#dc2626",
+    fontFamily: "Inter",
+    fontSize: 13,
+    bannerHeight: 48,
+    tickerSpeed: 40,
+    refreshRate: 10,
+    selectedPairs: ALL_PAIRS_LIST,
+  });
+
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    if (settings) {
+      setForm({
+        enabled: settings.enabled,
+        displayMode: settings.displayMode,
+        backgroundColor: settings.backgroundColor,
+        primaryColor: settings.primaryColor,
+        secondaryColor: settings.secondaryColor,
+        textColor: settings.textColor,
+        bullishColor: settings.bullishColor,
+        bearishColor: settings.bearishColor,
+        fontFamily: settings.fontFamily,
+        fontSize: settings.fontSize,
+        bannerHeight: settings.bannerHeight,
+        tickerSpeed: settings.tickerSpeed,
+        refreshRate: settings.refreshRate,
+        selectedPairs: Array.isArray(settings.selectedPairs) ? settings.selectedPairs : ALL_PAIRS_LIST,
+      });
+    }
+  }, [settings]);
+
+  const { mutate: save } = useUpdateBannerSettings({
+    mutation: {
+      onSuccess: () => {
+        setSaveStatus("saved");
+        qc.invalidateQueries({ queryKey: getGetBannerSettingsQueryKey() });
+        setTimeout(() => setSaveStatus("idle"), 2000);
+      },
+      onError: () => setSaveStatus("error"),
+    },
+  });
+
+  const handleSave = () => {
+    setSaveStatus("saving");
+    save({ data: form });
+  };
+
+  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const togglePair = (pair: string) => {
+    setForm((prev) => ({
+      ...prev,
+      selectedPairs: prev.selectedPairs.includes(pair)
+        ? prev.selectedPairs.filter((p) => p !== pair)
+        : [...prev.selectedPairs, pair],
+    }));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Radio className="h-4 w-4 text-blue-400" />
+            Banner Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Button
+            size="sm"
+            className={form.enabled ? "bg-green-600 hover:bg-green-700" : "bg-muted hover:bg-muted/80"}
+            onClick={() => setField("enabled", true)}
+          >
+            Enable
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className={!form.enabled ? "border-red-500/30 text-red-400 bg-red-500/10" : ""}
+            onClick={() => setField("enabled", false)}
+          >
+            Disable
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Banner is currently{" "}
+            <span className={form.enabled ? "text-green-400" : "text-red-400"}>
+              {form.enabled ? "enabled" : "disabled"}
+            </span>
+          </span>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Display Mode</CardTitle>
+          <CardDescription>How the banner is presented to users</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3 flex-wrap">
+            {[
+              { value: "ticker", label: "Scrolling Ticker", desc: "Continuous scrolling pairs strip" },
+              { value: "cards", label: "Card View", desc: "Individual pair cards" },
+              { value: "compact", label: "Compact View", desc: "Small static header strip" },
+            ].map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                onClick={() => setField("displayMode", mode.value)}
+                className={`flex-1 min-w-[140px] p-3 rounded-lg border text-left transition-colors ${
+                  form.displayMode === mode.value
+                    ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
+                    : "border-border hover:border-muted-foreground/30 text-muted-foreground"
+                }`}
+              >
+                <p className="font-medium text-sm">{mode.label}</p>
+                <p className="text-xs mt-0.5 opacity-70">{mode.desc}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Colors</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {(
+              [
+                { key: "backgroundColor" as const, label: "Background" },
+                { key: "textColor" as const, label: "Text Color" },
+                { key: "bullishColor" as const, label: "Bullish (Up)" },
+                { key: "bearishColor" as const, label: "Bearish (Down)" },
+                { key: "primaryColor" as const, label: "Primary Accent" },
+                { key: "secondaryColor" as const, label: "Secondary Accent" },
+              ] as const
+            ).map(({ key, label }) => (
+              <div key={key} className="space-y-1.5">
+                <Label className="text-xs">{label}</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={form[key]}
+                    onChange={(e) => setField(key, e.target.value)}
+                    className="h-9 w-12 rounded cursor-pointer border border-border bg-transparent p-0.5"
+                  />
+                  <Input
+                    value={form[key]}
+                    onChange={(e) => setField(key, e.target.value)}
+                    className="font-mono text-xs h-9"
+                    maxLength={7}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Typography</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-sm">
+          <div className="space-y-2">
+            <Label>Font Family</Label>
+            <select
+              value={form.fontFamily}
+              onChange={(e) => setField("fontFamily", e.target.value)}
+              className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground"
+            >
+              {["Inter", "Poppins", "Montserrat", "Roboto", "Open Sans"].map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Font Size — {form.fontSize}px</Label>
+            <input
+              type="range" min={10} max={20} value={form.fontSize}
+              onChange={(e) => setField("fontSize", Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Display Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-sm">
+          <div className="space-y-2">
+            <Label>Banner Height — {form.bannerHeight}px</Label>
+            <input
+              type="range" min={32} max={80} value={form.bannerHeight}
+              onChange={(e) => setField("bannerHeight", Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Ticker Speed — {form.tickerSpeed}s per loop (lower = faster)</Label>
+            <input
+              type="range" min={15} max={90} value={form.tickerSpeed}
+              onChange={(e) => setField("tickerSpeed", Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Data Refresh Rate — every {form.refreshRate}s</Label>
+            <input
+              type="range" min={5} max={30} value={form.refreshRate}
+              onChange={(e) => setField("refreshRate", Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Forex Pairs</CardTitle>
+          <CardDescription>Select which pairs to display on the banner</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {ALL_PAIRS_LIST.map((pair) => {
+              const selected = form.selectedPairs.includes(pair);
+              return (
+                <button
+                  key={pair}
+                  type="button"
+                  onClick={() => togglePair(pair)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-mono font-medium border transition-colors ${
+                    selected
+                      ? "border-blue-500/50 bg-blue-500/20 text-blue-300"
+                      : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                  }`}
+                >
+                  {pair}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {form.selectedPairs.length} / {ALL_PAIRS_LIST.length} pairs selected
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={handleSave}
+          className="bg-green-600 hover:bg-green-700"
+          disabled={saveStatus === "saving"}
+        >
+          {saveStatus === "saving" ? "Saving..." : "Save Settings"}
+        </Button>
+        {saveStatus === "saved" && (
+          <div className="flex items-center gap-1 text-green-400 text-sm">
+            <CheckCircle2 className="h-4 w-4" /> Saved
+          </div>
+        )}
+        {saveStatus === "error" && (
+          <div className="flex items-center gap-1 text-destructive text-sm">
+            <AlertCircle className="h-4 w-4" /> Failed to save
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -754,6 +1076,7 @@ export default function AdminPage() {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="monitor">Enforcement Monitor</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="banner">Market Banner</TabsTrigger>
           </TabsList>
 
           {/* Master Approvals tab */}
@@ -958,6 +1281,24 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Market Banner tab */}
+          <TabsContent value="banner">
+            <Card className="border-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Radio className="h-4 w-4 text-blue-400" />
+                  Market Banner Settings
+                </CardTitle>
+                <CardDescription>
+                  Customize the live forex market ticker displayed across all pages
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BannerSettingsTab />
               </CardContent>
             </Card>
           </TabsContent>

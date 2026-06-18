@@ -418,6 +418,86 @@ export interface IntegrationStatus {
   mode: IntegrationStatusMode;
 }
 
+export type ForexRateDirection = typeof ForexRateDirection[keyof typeof ForexRateDirection];
+
+
+export const ForexRateDirection = {
+  up: 'up',
+  down: 'down',
+  neutral: 'neutral',
+} as const;
+
+export interface ForexRate {
+  pair: string;
+  bid: number;
+  ask: number;
+  spread: number;
+  midPrice: number;
+  change: number;
+  changePercent: number;
+  direction: ForexRateDirection;
+}
+
+export type ForexRatesResponseMarketStatus = typeof ForexRatesResponseMarketStatus[keyof typeof ForexRatesResponseMarketStatus];
+
+
+export const ForexRatesResponseMarketStatus = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  OPENING_SOON: 'OPENING_SOON',
+} as const;
+
+export interface ForexRatesResponse {
+  rates: ForexRate[];
+  marketStatus: ForexRatesResponseMarketStatus;
+  cachedAt: string;
+  isStale?: boolean;
+}
+
+export type BannerSettingsDisplayMode = typeof BannerSettingsDisplayMode[keyof typeof BannerSettingsDisplayMode];
+
+
+export const BannerSettingsDisplayMode = {
+  ticker: 'ticker',
+  cards: 'cards',
+  compact: 'compact',
+} as const;
+
+export interface BannerSettings {
+  id: number;
+  enabled: boolean;
+  displayMode: BannerSettingsDisplayMode;
+  backgroundColor: string;
+  primaryColor: string;
+  secondaryColor: string;
+  textColor: string;
+  bullishColor: string;
+  bearishColor: string;
+  fontFamily: string;
+  fontSize: number;
+  bannerHeight: number;
+  tickerSpeed: number;
+  refreshRate: number;
+  selectedPairs: string[];
+}
+
+export interface BannerSettingsUpdate {
+  enabled?: boolean;
+  displayMode?: string;
+  backgroundColor?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  textColor?: string;
+  bullishColor?: string;
+  bearishColor?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  bannerHeight?: number;
+  tickerSpeed?: number;
+  refreshRate?: number;
+  selectedPairs?: string[];
+}
+
 export type RejectMasterAccountBody = {
   reason: string;
 };

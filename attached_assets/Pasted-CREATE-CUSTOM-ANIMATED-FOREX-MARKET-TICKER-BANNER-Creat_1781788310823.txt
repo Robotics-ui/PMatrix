@@ -1,0 +1,235 @@
+CREATE CUSTOM ANIMATED FOREX MARKET TICKER BANNER
+
+Create a premium animated Forex Market Banner for PesaMatrix.
+
+The banner must be fully responsive and visible on desktop, tablet, and mobile devices.
+
+PURPOSE
+
+Display real-time major forex pairs and market status.
+
+The banner should look professional and similar to financial terminals.
+
+---
+
+FOREX PAIRS
+
+Display:
+
+- EUR/USD
+- GBP/USD
+- USD/JPY
+- USD/CHF
+- AUD/USD
+- NZD/USD
+- USD/CAD
+- EUR/GBP
+- EUR/JPY
+- GBP/JPY
+
+---
+
+REAL-TIME DATA
+
+Fetch live forex prices using API integration.
+
+Display:
+
+- Bid
+- Ask
+- Spread
+- Daily Change %
+- Direction
+
+Direction indicators:
+
+▲ Green = Bullish
+
+▼ Red = Bearish
+
+▬ Grey = No Change
+
+Auto refresh every 5-10 seconds.
+
+---
+
+MARKET STATUS
+
+Display global market status prominently.
+
+Possible statuses:
+
+MARKET OPEN
+
+Animated Green Pulse
+
+Text:
+
+MARKET OPEN
+
+MARKET CLOSED
+
+Animated Red Pulse
+
+Text:
+
+MARKET CLOSED
+
+MARKET OPENING SOON
+
+Animated Amber Pulse
+
+Text:
+
+MARKET OPENS SOON
+
+Market hours should automatically follow Forex market schedule.
+
+---
+
+ANIMATION
+
+Implement smooth animations:
+
+- Scrolling ticker effect
+- Fade transitions
+- Slide transitions
+- Pulse effect for market status
+- Hover effects
+
+Animations must remain lightweight and fast.
+
+---
+
+CUSTOM BRANDING
+
+Create Admin Settings page:
+
+Market Banner Settings
+
+Allow Admin to customize:
+
+Colors
+
+- Background Color
+- Primary Color
+- Secondary Color
+- Text Color
+- Bullish Color
+- Bearish Color
+
+Fonts
+
+Allow Admin to select:
+
+- Inter
+- Poppins
+- Montserrat
+- Roboto
+- Open Sans
+
+Sizes
+
+- Font Size
+- Banner Height
+- Speed of Ticker
+
+Changes should update instantly.
+
+---
+
+DISPLAY MODES
+
+Mode 1:
+
+Scrolling Ticker
+
+Example:
+
+EUR/USD 1.0845 ▲ +0.25%
+
+GBP/USD 1.2740 ▼ -0.18%
+
+---
+
+Mode 2:
+
+Card View
+
+Each pair displayed in animated cards.
+
+---
+
+Mode 3:
+
+Compact View
+
+Small header strip.
+
+---
+
+DASHBOARD INTEGRATION
+
+Display banner on:
+
+- Homepage
+- User Dashboard
+- Master Dashboard
+- Subscriber Dashboard
+
+Allow Admin to enable/disable per page.
+
+---
+
+ADMIN CONTROL
+
+Create controls for:
+
+- Enable Banner
+- Disable Banner
+- Select Display Mode
+- Select Forex Pairs
+- Change Colors
+- Change Fonts
+- Change Refresh Rate
+
+---
+
+PERFORMANCE
+
+Must support:
+
+- Mobile devices
+- Desktop devices
+- Low bandwidth users
+
+Use caching and efficient updates.
+
+Avoid unnecessary API calls.
+
+---
+
+FAILOVER
+
+If live market feed is unavailable:
+
+Display:
+
+"Market Data Temporarily Unavailable"
+
+Continue showing latest cached prices.
+
+---
+
+FINAL REQUIREMENT
+
+Build a modern financial-market style animated banner with:
+
+- Real-time major forex pairs
+- Live market status
+- Custom colors
+- Custom fonts
+- Admin customization
+- Responsive design
+- Smooth animations
+- Production-ready performance

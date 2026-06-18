@@ -32,6 +32,8 @@ tags:
     description: Admin dashboard operations
   - name: dashboard
     description: Dashboard summary operations
+  - name: forex
+    description: Forex market ticker and banner settings
 
 paths:
   /healthz:
@@ -878,6 +880,68 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminSettings"
 
+  # FOREX
+  /forex/rates:
+    get:
+      operationId: getForexRates
+      tags: [forex]
+      summary: Get live forex rates and market status
+      responses:
+        "200":
+          description: Forex rates with market status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForexRatesResponse"
+        "503":
+          description: Market data unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /forex/banner-settings:
+    get:
+      operationId: getBannerSettings
+      tags: [forex]
+      summary: Get market banner display settings
+      responses:
+        "200":
+          description: Banner settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BannerSettings"
+    patch:
+      operationId: updateBannerSettings
+      tags: [forex]
+      summary: Update market banner settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BannerSettingsUpdate"
+      responses:
+        "200":
+          description: Updated banner settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BannerSettings"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -1454,3 +1518,115 @@ components:
         mode:
           type: string
           enum: [live, demo]
+
+    # FOREX
+    ForexRate:
+      type: object
+      required: [pair, bid, ask, spread, midPrice, change, changePercent, direction]
+      properties:
+        pair:
+          type: string
+        bid:
+          type: number
+        ask:
+          type: number
+        spread:
+          type: number
+        midPrice:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        direction:
+          type: string
+          enum: [up, down, neutral]
+
+    ForexRatesResponse:
+      type: object
+      required: [rates, marketStatus, cachedAt]
+      properties:
+        rates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForexRate"
+        marketStatus:
+          type: string
+          enum: [OPEN, CLOSED, OPENING_SOON]
+        cachedAt:
+          type: string
+          format: date-time
+        isStale:
+          type: boolean
+
+    BannerSettings:
+      type: object
+      required: [id, enabled, displayMode, backgroundColor, primaryColor, secondaryColor, textColor, bullishColor, bearishColor, fontFamily, fontSize, bannerHeight, tickerSpeed, refreshRate, selectedPairs]
+      properties:
+        id:
+          type: integer
+        enabled:
+          type: boolean
+        displayMode:
+          type: string
+          enum: [ticker, cards, compact]
+        backgroundColor:
+          type: string
+        primaryColor:
+          type: string
+        secondaryColor:
+          type: string
+        textColor:
+          type: string
+        bullishColor:
+          type: string
+        bearishColor:
+          type: string
+        fontFamily:
+          type: string
+        fontSize:
+          type: integer
+        bannerHeight:
+          type: integer
+        tickerSpeed:
+          type: integer
+        refreshRate:
+          type: integer
+        selectedPairs:
+          type: array
+          items:
+            type: string
+
+    BannerSettingsUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        displayMode:
+          type: string
+        backgroundColor:
+          type: string
+        primaryColor:
+          type: string
+        secondaryColor:
+          type: string
+        textColor:
+          type: string
+        bullishColor:
+          type: string
+        bearishColor:
+          type: string
+        fontFamily:
+          type: string
+        fontSize:
+          type: integer
+        bannerHeight:
+          type: integer
+        tickerSpeed:
+          type: integer
+        refreshRate:
+          type: integer
+        selectedPairs:
+          type: array
+          items:
+            type: string

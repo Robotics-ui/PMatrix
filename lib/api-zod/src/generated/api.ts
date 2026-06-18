@@ -762,3 +762,84 @@ export const UpdateAdminSettingsResponse = zod.object({
 })
 
 
+/**
+ * @summary Get live forex rates and market status
+ */
+export const GetForexRatesResponse = zod.object({
+  "rates": zod.array(zod.object({
+  "pair": zod.string(),
+  "bid": zod.number(),
+  "ask": zod.number(),
+  "spread": zod.number(),
+  "midPrice": zod.number(),
+  "change": zod.number(),
+  "changePercent": zod.number(),
+  "direction": zod.enum(['up', 'down', 'neutral'])
+})),
+  "marketStatus": zod.enum(['OPEN', 'CLOSED', 'OPENING_SOON']),
+  "cachedAt": zod.coerce.date(),
+  "isStale": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Get market banner display settings
+ */
+export const GetBannerSettingsResponse = zod.object({
+  "id": zod.number(),
+  "enabled": zod.boolean(),
+  "displayMode": zod.enum(['ticker', 'cards', 'compact']),
+  "backgroundColor": zod.string(),
+  "primaryColor": zod.string(),
+  "secondaryColor": zod.string(),
+  "textColor": zod.string(),
+  "bullishColor": zod.string(),
+  "bearishColor": zod.string(),
+  "fontFamily": zod.string(),
+  "fontSize": zod.number(),
+  "bannerHeight": zod.number(),
+  "tickerSpeed": zod.number(),
+  "refreshRate": zod.number(),
+  "selectedPairs": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Update market banner settings (admin only)
+ */
+export const UpdateBannerSettingsBody = zod.object({
+  "enabled": zod.boolean().optional(),
+  "displayMode": zod.string().optional(),
+  "backgroundColor": zod.string().optional(),
+  "primaryColor": zod.string().optional(),
+  "secondaryColor": zod.string().optional(),
+  "textColor": zod.string().optional(),
+  "bullishColor": zod.string().optional(),
+  "bearishColor": zod.string().optional(),
+  "fontFamily": zod.string().optional(),
+  "fontSize": zod.number().optional(),
+  "bannerHeight": zod.number().optional(),
+  "tickerSpeed": zod.number().optional(),
+  "refreshRate": zod.number().optional(),
+  "selectedPairs": zod.array(zod.string()).optional()
+})
+
+export const UpdateBannerSettingsResponse = zod.object({
+  "id": zod.number(),
+  "enabled": zod.boolean(),
+  "displayMode": zod.enum(['ticker', 'cards', 'compact']),
+  "backgroundColor": zod.string(),
+  "primaryColor": zod.string(),
+  "secondaryColor": zod.string(),
+  "textColor": zod.string(),
+  "bullishColor": zod.string(),
+  "bearishColor": zod.string(),
+  "fontFamily": zod.string(),
+  "fontSize": zod.number(),
+  "bannerHeight": zod.number(),
+  "tickerSpeed": zod.number(),
+  "refreshRate": zod.number(),
+  "selectedPairs": zod.array(zod.string())
+})
+
+

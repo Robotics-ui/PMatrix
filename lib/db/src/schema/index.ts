@@ -11,3 +11,4 @@ export * from "./mediaUploads";
 export * from "./newsArticles";
 export * from "./learningResources";
 export * from "./announcements";
+export * from "./bannerSettings";

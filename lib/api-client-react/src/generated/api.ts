@@ -26,11 +26,14 @@ import type {
   AdminStats,
   AdminUser,
   AuthResponse,
+  BannerSettings,
+  BannerSettingsUpdate,
   Binding,
   BindingInput,
   ChangePasswordInput,
   DashboardSummary,
   ErrorResponse,
+  ForexRatesResponse,
   ForgotPasswordInput,
   HealthStatus,
   IntegrationStatus,
@@ -3308,5 +3311,230 @@ export const useUpdateAdminSettings = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateAdminSettingsMutationOptions(options));
+    }
+
+export const getGetForexRatesUrl = () => {
+
+
+
+
+  return `/api/forex/rates`
+}
+
+/**
+ * @summary Get live forex rates and market status
+ */
+export const getForexRates = async ( options?: RequestInit): Promise<ForexRatesResponse> => {
+
+  return customFetch<ForexRatesResponse>(getGetForexRatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetForexRatesQueryKey = () => {
+    return [
+    `/api/forex/rates`
+    ] as const;
+    }
+
+
+export const getGetForexRatesQueryOptions = <TData = Awaited<ReturnType<typeof getForexRates>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getForexRates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetForexRatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getForexRates>>> = ({ signal }) => getForexRates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getForexRates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetForexRatesQueryResult = NonNullable<Awaited<ReturnType<typeof getForexRates>>>
+export type GetForexRatesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get live forex rates and market status
+ */
+
+export function useGetForexRates<TData = Awaited<ReturnType<typeof getForexRates>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getForexRates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetForexRatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBannerSettingsUrl = () => {
+
+
+
+
+  return `/api/forex/banner-settings`
+}
+
+/**
+ * @summary Get market banner display settings
+ */
+export const getBannerSettings = async ( options?: RequestInit): Promise<BannerSettings> => {
+
+  return customFetch<BannerSettings>(getGetBannerSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBannerSettingsQueryKey = () => {
+    return [
+    `/api/forex/banner-settings`
+    ] as const;
+    }
+
+
+export const getGetBannerSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getBannerSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBannerSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBannerSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBannerSettings>>> = ({ signal }) => getBannerSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBannerSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBannerSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getBannerSettings>>>
+export type GetBannerSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get market banner display settings
+ */
+
+export function useGetBannerSettings<TData = Awaited<ReturnType<typeof getBannerSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBannerSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBannerSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateBannerSettingsUrl = () => {
+
+
+
+
+  return `/api/forex/banner-settings`
+}
+
+/**
+ * @summary Update market banner settings (admin only)
+ */
+export const updateBannerSettings = async (bannerSettingsUpdate: BannerSettingsUpdate, options?: RequestInit): Promise<BannerSettings> => {
+
+  return customFetch<BannerSettings>(getUpdateBannerSettingsUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bannerSettingsUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateBannerSettingsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBannerSettings>>, TError,{data: BodyType<BannerSettingsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateBannerSettings>>, TError,{data: BodyType<BannerSettingsUpdate>}, TContext> => {
+
+const mutationKey = ['updateBannerSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBannerSettings>>, {data: BodyType<BannerSettingsUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateBannerSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateBannerSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateBannerSettings>>>
+    export type UpdateBannerSettingsMutationBody = BodyType<BannerSettingsUpdate>
+    export type UpdateBannerSettingsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update market banner settings (admin only)
+ */
+export const useUpdateBannerSettings = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBannerSettings>>, TError,{data: BodyType<BannerSettingsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateBannerSettings>>,
+        TError,
+        {data: BodyType<BannerSettingsUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateBannerSettingsMutationOptions(options));
     }
 

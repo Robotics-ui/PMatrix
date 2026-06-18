@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./sidebar";
+import { ForexBanner } from "@/components/forex-banner";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -33,9 +34,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="dark flex h-screen bg-background overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ForexBanner />
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
