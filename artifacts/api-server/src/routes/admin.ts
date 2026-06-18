@@ -336,10 +336,7 @@ router.get("/admin/integration-status", authenticate, requireAdmin, async (_req,
   const shortcode = !!process.env.MPESA_SHORTCODE;
   const webhookSecret = !!process.env.COPYFACTORY_WEBHOOK_SECRET;
 
-  // Mirror the same callback URL resolution logic used in payments.ts
-  const replitDomains = process.env.REPLIT_DOMAINS;
-  const firstDomain = replitDomains ? replitDomains.split(",")[0].trim() : null;
-  const callbackUrl = !!(firstDomain || process.env.MPESA_CALLBACK_URL);
+  const callbackUrl = !!process.env.MPESA_CALLBACK_URL;
 
   const mpesaLive = consumerKey && consumerSecret && passkey && shortcode && callbackUrl;
 

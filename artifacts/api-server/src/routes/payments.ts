@@ -64,21 +64,12 @@ router.post("/payments", authenticate, async (req, res): Promise<void> => {
   const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
   const passkey = process.env.MPESA_PASSKEY;
   const shortcode = process.env.MPESA_SHORTCODE;
-  // Build callback URL: always prefer REPLIT_DOMAINS (auto-correct production domain),
-  // fall back to MPESA_CALLBACK_URL only when REPLIT_DOMAINS is unavailable.
-  const replitDomains = process.env.REPLIT_DOMAINS;
-  const firstDomain = replitDomains ? replitDomains.split(",")[0].trim() : null;
-  const callbackUrl =
-    (firstDomain ? `https://${firstDomain}/api/payments/callback` : null) ||
-    process.env.MPESA_CALLBACK_URL ||
-    undefined;
+  const callbackUrl = process.env.MPESA_CALLBACK_URL;
 
   // Log callback URL at runtime so it can be verified in logs
   logger.info(
     {
       MPESA_CALLBACK_URL: callbackUrl ?? "NOT_SET",
-      REPLIT_DOMAINS: replitDomains ?? "NOT_SET",
-      source: process.env.MPESA_CALLBACK_URL ? "env_var" : firstDomain ? "replit_domains" : "missing",
     },
     "MPESA env check"
   );
