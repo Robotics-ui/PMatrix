@@ -37,6 +37,8 @@ export * from './paymentStatus';
 export * from './paymentStatusResponse';
 export * from './paymentStatusResponseStatus';
 export * from './registerInput';
+export * from './schedulerRunLog';
+export * from './schedulerStatusResponse';
 export * from './slaveAccount';
 export * from './slaveAccountInput';
 export * from './slaveAccountStatus';

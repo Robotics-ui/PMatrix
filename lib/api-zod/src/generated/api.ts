@@ -544,6 +544,53 @@ export const ListAdminPaymentsResponse = zod.array(ListAdminPaymentsResponseItem
 
 
 /**
+ * @summary Get subscription enforcement worker status and run history
+ */
+export const GetSchedulerStatusResponse = zod.object({
+  "isRunning": zod.boolean(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "recentRuns": zod.array(zod.object({
+  "runAt": zod.coerce.date(),
+  "durationMs": zod.number(),
+  "totalChecked": zod.number(),
+  "totalActive": zod.number(),
+  "totalExpired": zod.number(),
+  "totalRenewed": zod.number(),
+  "totalUnbound": zod.number(),
+  "totalRebound": zod.number(),
+  "totalFailures": zod.number(),
+  "errors": zod.array(zod.string())
+})),
+  "lastRun": zod.union([zod.object({
+  "runAt": zod.coerce.date(),
+  "durationMs": zod.number(),
+  "totalChecked": zod.number(),
+  "totalActive": zod.number(),
+  "totalExpired": zod.number(),
+  "totalRenewed": zod.number(),
+  "totalUnbound": zod.number(),
+  "totalRebound": zod.number(),
+  "totalFailures": zod.number(),
+  "errors": zod.array(zod.string())
+}),zod.null()]),
+  "unbindingsToday": zod.number(),
+  "activeBindingsTotal": zod.number(),
+  "totalSubscriptionsInDb": zod.number(),
+  "activeSubscriptionsInDb": zod.number(),
+  "expiredSubscriptionsInDb": zod.number()
+})
+
+
+/**
+ * @summary Manually trigger a subscription enforcement tick
+ */
+export const TriggerSchedulerRunResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary Get production integration credentials status
  */
 export const GetIntegrationStatusResponse = zod.object({

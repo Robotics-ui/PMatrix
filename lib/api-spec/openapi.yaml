@@ -666,6 +666,32 @@ paths:
                 items:
                   $ref: "#/components/schemas/Payment"
 
+  /admin/scheduler-status:
+    get:
+      operationId: getSchedulerStatus
+      tags: [admin]
+      summary: Get subscription enforcement worker status and run history
+      responses:
+        "200":
+          description: Scheduler status with live DB counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatusResponse"
+
+  /admin/scheduler/run:
+    post:
+      operationId: triggerSchedulerRun
+      tags: [admin]
+      summary: Manually trigger a subscription enforcement tick
+      responses:
+        "200":
+          description: Tick triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
   /admin/integration-status:
     get:
       operationId: getIntegrationStatus
@@ -1167,6 +1193,65 @@ components:
         metaApiToken:
           type: string
           nullable: true
+
+    SchedulerRunLog:
+      type: object
+      required: [runAt, durationMs, totalChecked, totalActive, totalExpired, totalRenewed, totalUnbound, totalRebound, totalFailures, errors]
+      properties:
+        runAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+        totalChecked:
+          type: integer
+        totalActive:
+          type: integer
+        totalExpired:
+          type: integer
+        totalRenewed:
+          type: integer
+        totalUnbound:
+          type: integer
+        totalRebound:
+          type: integer
+        totalFailures:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+
+    SchedulerStatusResponse:
+      type: object
+      required: [isRunning, lastRunAt, nextRunAt, recentRuns, lastRun, unbindingsToday, activeBindingsTotal, totalSubscriptionsInDb, activeSubscriptionsInDb, expiredSubscriptionsInDb]
+      properties:
+        isRunning:
+          type: boolean
+        lastRunAt:
+          type: ["string", "null"]
+          format: date-time
+        nextRunAt:
+          type: ["string", "null"]
+          format: date-time
+        recentRuns:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerRunLog"
+        lastRun:
+          oneOf:
+            - $ref: "#/components/schemas/SchedulerRunLog"
+            - type: "null"
+        unbindingsToday:
+          type: integer
+        activeBindingsTotal:
+          type: integer
+        totalSubscriptionsInDb:
+          type: integer
+        activeSubscriptionsInDb:
+          type: integer
+        expiredSubscriptionsInDb:
+          type: integer
 
     IntegrationStatus:
       type: object

@@ -340,6 +340,34 @@ export interface AdminSettingsUpdate {
   metaApiToken?: string | null;
 }
 
+export interface SchedulerRunLog {
+  runAt: string;
+  durationMs: number;
+  totalChecked: number;
+  totalActive: number;
+  totalExpired: number;
+  totalRenewed: number;
+  totalUnbound: number;
+  totalRebound: number;
+  totalFailures: number;
+  errors: string[];
+}
+
+export interface SchedulerStatusResponse {
+  isRunning: boolean;
+  /** @nullable */
+  lastRunAt: string | null;
+  /** @nullable */
+  nextRunAt: string | null;
+  recentRuns: SchedulerRunLog[];
+  lastRun: SchedulerRunLog | null;
+  unbindingsToday: number;
+  activeBindingsTotal: number;
+  totalSubscriptionsInDb: number;
+  activeSubscriptionsInDb: number;
+  expiredSubscriptionsInDb: number;
+}
+
 export type IntegrationStatusMetaapi = {
   token: boolean;
 };

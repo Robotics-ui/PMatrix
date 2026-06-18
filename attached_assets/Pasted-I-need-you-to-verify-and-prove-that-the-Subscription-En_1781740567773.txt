@@ -1,0 +1,67 @@
+I need you to verify and prove that the Subscription Enforcement Worker is fully operational.
+
+Please perform the following checks and provide evidence:
+
+1. Locate the scheduled worker/cron job responsible for subscription enforcement.
+
+2. Confirm how often it runs and provide the exact schedule. It must run every 30 minutes.
+
+3. Show the source file and function responsible for:
+   
+   - Checking subscription status.
+   - Determining whether a subscription is active or expired.
+   - Binding subscriber accounts to CopyFactory strategies.
+   - Unbinding subscriber accounts from CopyFactory strategies.
+
+4. Confirm that on every execution the worker scans ALL subscribed users and not just recently modified users.
+
+5. Explain the exact logic used:
+   
+   - If subscription is active → subscriber account must remain bound and receive copy trades.
+   - If subscription is expired → subscriber account must be immediately unbound and receive no copy trades.
+
+6. Verify that expired users cannot continue receiving trades due to:
+   
+   - Cached data.
+   - Missed worker runs.
+   - Failed API calls.
+   - Database synchronization issues.
+
+7. Show the database query used to fetch active and expired subscriptions.
+
+8. Show the MetaApi/CopyFactory API calls used for:
+   
+   - Binding subscribers.
+   - Unbinding subscribers.
+
+9. Verify that the worker continues processing remaining accounts if one account fails.
+
+10. Add detailed logging:
+    
+    - Worker start time.
+    - Number of subscriptions checked.
+    - Number of active subscriptions.
+    - Number of expired subscriptions.
+    - Number of subscribers bound.
+    - Number of subscribers unbound.
+    - Number of failures.
+
+11. Create an admin dashboard page named "Subscription Enforcement Monitor" displaying:
+    
+    - Last worker run time.
+    - Next scheduled run time.
+    - Total subscriptions checked.
+    - Total active subscribers.
+    - Total expired subscribers.
+    - Total active bindings.
+    - Total unbindings performed today.
+    - Any worker errors.
+
+12. Simulate the following tests and provide results:
+    
+    - Active subscriber receives copy trades.
+    - Expired subscriber is automatically unbound.
+    - Renewed subscriber is automatically rebound.
+    - System handling 2,000 slave accounts.
+
+Finally, provide proof that no expired subscriber can receive copy trades and no active paid subscriber is mistakenly disconnected.

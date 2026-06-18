@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { eq, sum, count } from "drizzle-orm";
-import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable } from "@workspace/db";
+import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable, bindingsTable } from "@workspace/db";
 import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "@workspace/api-zod";
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { invalidateMetaApiTokenCache } from "../lib/metaapi";
+import { getSchedulerStatus, runEnforcementTick } from "../lib/scheduler";
 
 const router = Router();
 
@@ -187,6 +188,42 @@ router.patch("/admin/settings", authenticate, requireAdmin, async (req, res): Pr
   invalidateMetaApiTokenCache();
 
   res.json({ ...settings, dailyFee: parseFloat(settings.dailyFee as string) });
+});
+
+router.get("/admin/scheduler-status", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  const schedulerStatus = getSchedulerStatus();
+
+  const [activeBindingsResult] = await db
+    .select({ count: count() })
+    .from(bindingsTable)
+    .where(eq(bindingsTable.status, "active"));
+
+  const [totalSubsResult] = await db
+    .select({ count: count() })
+    .from(subscriptionsTable);
+
+  const [activeSubsResult] = await db
+    .select({ count: count() })
+    .from(subscriptionsTable)
+    .where(eq(subscriptionsTable.status, "active"));
+
+  const [expiredSubsResult] = await db
+    .select({ count: count() })
+    .from(subscriptionsTable)
+    .where(eq(subscriptionsTable.status, "expired"));
+
+  res.json({
+    ...schedulerStatus,
+    activeBindingsTotal: activeBindingsResult.count,
+    totalSubscriptionsInDb: totalSubsResult.count,
+    activeSubscriptionsInDb: activeSubsResult.count,
+    expiredSubscriptionsInDb: expiredSubsResult.count,
+  });
+});
+
+router.post("/admin/scheduler/run", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  void runEnforcementTick();
+  res.json({ message: "Enforcement tick triggered" });
 });
 
 router.get("/admin/integration-status", authenticate, requireAdmin, async (_req, res): Promise<void> => {

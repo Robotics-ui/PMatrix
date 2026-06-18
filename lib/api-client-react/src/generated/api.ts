@@ -42,6 +42,7 @@ import type {
   PaymentInput,
   PaymentStatusResponse,
   RegisterInput,
+  SchedulerStatusResponse,
   SlaveAccount,
   SlaveAccountInput,
   Strategy,
@@ -2573,6 +2574,153 @@ export function useListAdminPayments<TData = Awaited<ReturnType<typeof listAdmin
 
 
 
+
+export const getGetSchedulerStatusUrl = () => {
+
+
+
+
+  return `/api/admin/scheduler-status`
+}
+
+/**
+ * @summary Get subscription enforcement worker status and run history
+ */
+export const getSchedulerStatus = async ( options?: RequestInit): Promise<SchedulerStatusResponse> => {
+
+  return customFetch<SchedulerStatusResponse>(getGetSchedulerStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSchedulerStatusQueryKey = () => {
+    return [
+    `/api/admin/scheduler-status`
+    ] as const;
+    }
+
+
+export const getGetSchedulerStatusQueryOptions = <TData = Awaited<ReturnType<typeof getSchedulerStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSchedulerStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchedulerStatus>>> = ({ signal }) => getSchedulerStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSchedulerStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getSchedulerStatus>>>
+export type GetSchedulerStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get subscription enforcement worker status and run history
+ */
+
+export function useGetSchedulerStatus<TData = Awaited<ReturnType<typeof getSchedulerStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSchedulerStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getTriggerSchedulerRunUrl = () => {
+
+
+
+
+  return `/api/admin/scheduler/run`
+}
+
+/**
+ * @summary Manually trigger a subscription enforcement tick
+ */
+export const triggerSchedulerRun = async ( options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getTriggerSchedulerRunUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTriggerSchedulerRunMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerSchedulerRun>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof triggerSchedulerRun>>, TError,void, TContext> => {
+
+const mutationKey = ['triggerSchedulerRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof triggerSchedulerRun>>, void> = () => {
+
+
+          return  triggerSchedulerRun(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TriggerSchedulerRunMutationResult = NonNullable<Awaited<ReturnType<typeof triggerSchedulerRun>>>
+
+    export type TriggerSchedulerRunMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Manually trigger a subscription enforcement tick
+ */
+export const useTriggerSchedulerRun = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof triggerSchedulerRun>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof triggerSchedulerRun>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTriggerSchedulerRunMutationOptions(options));
+    }
 
 export const getGetIntegrationStatusUrl = () => {
 
