@@ -1,0 +1,340 @@
+IMPLEMENT MEDIA CENTER, NEWS, RESOURCES AND ANNOUNCEMENTS MODULE
+
+Create a complete Content Management System (CMS) for PesaMatrix that allows Admins to create, edit and delete content from the Admin Dashboard.
+
+GENERAL REQUIREMENTS
+
+Only Admin users can:
+
+- Create
+- Upload
+- Edit
+- Publish
+- Unpublish
+- Delete
+
+Regular users can only view published content.
+
+All uploads must support mobile phone gallery uploads.
+
+---
+
+1. MEDIA CENTER
+
+Create a Media Center module.
+
+Admin Functions
+
+Allow Admin to upload:
+
+Images
+
+Supported formats:
+
+- JPG
+- JPEG
+- PNG
+- WEBP
+
+Source:
+
+- Phone Gallery
+- Computer Upload
+
+Videos
+
+Supported formats:
+
+- MP4
+- MOV
+- WEBM
+
+Source:
+
+- Phone Gallery
+- Computer Upload
+
+Video Links
+
+Allow Admin to add:
+
+- YouTube links
+- Vimeo links
+- External video URLs
+
+Examples:
+
+https://youtube.com/...
+
+https://youtu.be/...
+
+Store:
+
+- Title
+- Description
+- Thumbnail
+- Upload Date
+- Category
+
+Actions:
+
+- Create
+- Edit
+- Delete
+- Publish
+- Unpublish
+
+---
+
+2. TRADING NEWS MODULE
+
+Create a News Management Module.
+
+Admin can create trading news articles.
+
+Fields:
+
+- Headline
+- Featured Image
+- Summary
+- Full Content
+- Category
+- Author
+- Publish Date
+
+Categories:
+
+- Forex
+- Crypto
+- Indices
+- Commodities
+- Market Updates
+- Economic Events
+
+Actions:
+
+- Create
+- Edit
+- Delete
+- Publish
+- Unpublish
+
+Frontend:
+
+Create a News Page.
+
+Display:
+
+- Featured News
+- Latest News
+- Category Filters
+- Search
+
+---
+
+3. LEARNING RESOURCES MODULE
+
+Create a Trading Resources section.
+
+Admin can upload:
+
+Documents
+
+Supported:
+
+- PDF
+- DOCX
+- XLSX
+- PPTX
+
+Videos
+
+Supported:
+
+- Upload from gallery
+- YouTube links
+
+Images
+
+Supported:
+
+- JPG
+- PNG
+- WEBP
+
+Fields:
+
+- Resource Title
+- Description
+- Category
+- File
+- Video Link
+- Thumbnail
+
+Categories:
+
+- Beginner Trading
+- Technical Analysis
+- Fundamental Analysis
+- Risk Management
+- Psychology
+- MT4 Tutorials
+- MT5 Tutorials
+- Copy Trading
+
+Actions:
+
+- Create
+- Edit
+- Delete
+- Publish
+- Unpublish
+
+Frontend:
+
+Create Resources Library page.
+
+Allow:
+
+- Search
+- Category Filter
+- Download Resources
+- Watch Videos
+
+---
+
+4. ANNOUNCEMENTS MODULE
+
+Create Announcements Management.
+
+Admin can create:
+
+- Maintenance Notices
+- New Features
+- Payment Updates
+- Trading Schedule Changes
+- Company Updates
+
+Fields:
+
+- Title
+- Message
+- Image (optional)
+- Priority
+
+Priority Levels:
+
+- Normal
+- Important
+- Critical
+
+Actions:
+
+- Create
+- Edit
+- Delete
+- Publish
+- Unpublish
+
+Frontend:
+
+Display announcements on:
+
+- Dashboard
+- Home Page
+- Notifications Area
+
+Critical announcements should appear as a banner.
+
+---
+
+5. DELETE FUNCTIONALITY
+
+Every module must support:
+
+Soft Delete
+
+and
+
+Permanent Delete
+
+Before deletion:
+
+Show confirmation dialog:
+
+"Are you sure you want to delete this item?"
+
+Deleted items must be removable from storage.
+
+---
+
+6. DATABASE TABLES
+
+Create:
+
+media_uploads
+
+news_articles
+
+learning_resources
+
+announcements
+
+content_categories
+
+Store:
+
+- created_by
+- created_at
+- updated_at
+- published_at
+- status
+
+Status values:
+
+- draft
+- published
+- unpublished
+- deleted
+
+---
+
+7. ADMIN DASHBOARD
+
+Create new menu items:
+
+Media Center
+
+Trading News
+
+Resources
+
+Announcements
+
+Deleted Content
+
+Each page must support:
+
+- Search
+- Filters
+- Pagination
+- Edit
+- Delete
+- Publish
+- Unpublish
+
+---
+
+8. MOBILE FRIENDLY
+
+Admin must be able to:
+
+- Upload from Android gallery
+- Upload from iPhone gallery
+- Upload videos
+- Upload images
+- Upload documents
+
+using mobile devices without requiring a computer.
+
+Implement complete frontend, backend, database schema, APIs and storage integration.
