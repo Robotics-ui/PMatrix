@@ -96,6 +96,7 @@ router.post("/slave-accounts", authenticate, async (req, res): Promise<void> => 
           platform: "mt5",
           type: "cloud-g2",
           magic: Math.floor(Math.random() * 900000) + 100000,
+          reliability: "regular",
         }
       );
 
