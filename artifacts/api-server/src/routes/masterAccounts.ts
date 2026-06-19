@@ -82,6 +82,7 @@ export async function deployMasterToMetaApi(params: {
         name: `${params.broker}-${params.mt5Login}`,
         platform: "mt5",
         type: "cloud-g2",
+        magic: Math.floor(Math.random() * 900000) + 100000,
       }
     );
 
