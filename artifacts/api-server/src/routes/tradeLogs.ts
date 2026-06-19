@@ -5,6 +5,12 @@ import { authenticate } from "../middlewares/authenticate";
 
 const router = Router();
 
+function parseNum(v: unknown): number | null {
+  if (v == null) return null;
+  const n = parseFloat(String(v));
+  return isNaN(n) ? null : n;
+}
+
 router.get("/trade-logs", authenticate, async (req, res): Promise<void> => {
   const userStrategies = await db
     .select()
@@ -18,14 +24,33 @@ router.get("/trade-logs", authenticate, async (req, res): Promise<void> => {
     return;
   }
 
+  const strategyMap = new Map(userStrategies.map((s) => [s.id, s.strategyName]));
+
   const logs = await db
     .select()
     .from(tradeLogsTable)
     .where(inArray(tradeLogsTable.strategyId, strategyIds))
     .orderBy(desc(tradeLogsTable.createdAt))
-    .limit(100);
+    .limit(200);
 
-  res.json(logs);
+  res.json(
+    logs.map((log) => ({
+      id: log.id,
+      strategyId: log.strategyId,
+      strategyName: strategyMap.get(log.strategyId) ?? null,
+      slaveAccountId: log.slaveAccountId ?? null,
+      action: log.action,
+      symbol: log.symbol ?? null,
+      side: log.side ?? null,
+      volume: parseNum(log.volume),
+      profit: parseNum(log.profit),
+      openPrice: parseNum(log.openPrice),
+      closePrice: parseNum(log.closePrice),
+      transactionId: log.transactionId ?? null,
+      details: log.details ?? null,
+      createdAt: log.createdAt,
+    }))
+  );
 });
 
 export default router;

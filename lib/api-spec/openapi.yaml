@@ -1407,6 +1407,22 @@ components:
           type: ["integer", "null"]
         action:
           type: string
+        symbol:
+          type: ["string", "null"]
+        side:
+          type: ["string", "null"]
+        volume:
+          type: ["number", "null"]
+        profit:
+          type: ["number", "null"]
+        openPrice:
+          type: ["number", "null"]
+        closePrice:
+          type: ["number", "null"]
+        transactionId:
+          type: ["string", "null"]
+        strategyName:
+          type: ["string", "null"]
         details:
           type: ["string", "null"]
         createdAt:

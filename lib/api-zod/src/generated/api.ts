@@ -466,6 +466,14 @@ export const ListTradeLogsResponseItem = zod.object({
   "strategyId": zod.number(),
   "slaveAccountId": zod.number().nullish(),
   "action": zod.string(),
+  "symbol": zod.string().nullish(),
+  "side": zod.string().nullish(),
+  "volume": zod.number().nullish(),
+  "profit": zod.number().nullish(),
+  "openPrice": zod.number().nullish(),
+  "closePrice": zod.number().nullish(),
+  "transactionId": zod.string().nullish(),
+  "strategyName": zod.string().nullish(),
   "details": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -505,6 +513,14 @@ export const GetDashboardSummaryResponse = zod.object({
   "strategyId": zod.number(),
   "slaveAccountId": zod.number().nullish(),
   "action": zod.string(),
+  "symbol": zod.string().nullish(),
+  "side": zod.string().nullish(),
+  "volume": zod.number().nullish(),
+  "profit": zod.number().nullish(),
+  "openPrice": zod.number().nullish(),
+  "closePrice": zod.number().nullish(),
+  "transactionId": zod.string().nullish(),
+  "strategyName": zod.string().nullish(),
   "details": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 }))

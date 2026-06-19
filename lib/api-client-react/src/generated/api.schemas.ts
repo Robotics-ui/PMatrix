@@ -314,6 +314,22 @@ export interface TradeLog {
   slaveAccountId?: number | null;
   action: string;
   /** @nullable */
+  symbol?: string | null;
+  /** @nullable */
+  side?: string | null;
+  /** @nullable */
+  volume?: number | null;
+  /** @nullable */
+  profit?: number | null;
+  /** @nullable */
+  openPrice?: number | null;
+  /** @nullable */
+  closePrice?: number | null;
+  /** @nullable */
+  transactionId?: string | null;
+  /** @nullable */
+  strategyName?: string | null;
+  /** @nullable */
   details?: string | null;
   createdAt: string;
 }
