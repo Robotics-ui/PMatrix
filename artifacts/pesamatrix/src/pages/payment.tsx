@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle2, Smartphone, Clock, CreditCard, Info, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Smartphone, Clock, CreditCard, Info, Loader2, RefreshCw, ListOrdered } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMySubscriptionQueryKey } from "@workspace/api-client-react";
 
@@ -201,6 +201,63 @@ export default function PaymentPage() {
                   Weekends are not counted — subscription runs on trading days only (Mon–Fri).
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Step-by-step instructions */}
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ListOrdered className="h-4 w-4 text-blue-400" />
+              How to Subscribe
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="space-y-3">
+              {[
+                {
+                  step: 1,
+                  title: "Choose your trading days",
+                  desc: "Use the slider or preset buttons to select how many trading days you want. Weekends don't count — only Mon–Fri.",
+                },
+                {
+                  step: 2,
+                  title: "Enter your M-Pesa number",
+                  desc: "Type the Safaricom number you want to pay from. Accepted formats: 07XXXXXXXX, 7XXXXXXXX, or 254XXXXXXXXX.",
+                },
+                {
+                  step: 3,
+                  title: "Tap Pay and wait for the STK Push",
+                  desc: "A payment prompt will pop up on your phone automatically. This may take a few seconds.",
+                },
+                {
+                  step: 4,
+                  title: "Enter your M-Pesa PIN",
+                  desc: "On your phone, confirm the payment by entering your M-Pesa PIN when prompted.",
+                },
+                {
+                  step: 5,
+                  title: "Subscription activates instantly",
+                  desc: "Once payment is confirmed your subscription is activated and copy trading begins. You'll see the receipt and status update below.",
+                },
+              ].map(({ step, title, desc }) => (
+                <li key={step} className="flex gap-3">
+                  <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-600/20 text-blue-400 text-xs font-bold flex items-center justify-center mt-0.5">
+                    {step}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-4 pt-4 border-t border-border flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                If the STK Push doesn't arrive within 30 seconds, ensure your phone has network coverage and your M-Pesa account is active. You can also use the <span className="text-foreground font-medium">I Have Paid — Check Now</span> button after tapping Pay.
+              </p>
             </div>
           </CardContent>
         </Card>
