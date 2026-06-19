@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Send, Settings, FileText, List, BarChart3, RefreshCw } from "lucide-react";
+import { MessageSquare, Send, Settings, FileText, List, BarChart3, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const token = () => localStorage.getItem("auth_token") ?? "";
@@ -222,6 +222,20 @@ function SettingsTab() {
   );
 }
 
+const SAMPLE_VALUES: Record<string, string> = {
+  name: "John Doe",
+  endDate: "Fri, 27 Jun 2025",
+  daysLeft: "3",
+  amount: "500",
+  receipt: "RGH3K2X1Y4",
+  accountId: "ACC-001",
+  message: "System announcement: platform maintenance scheduled.",
+};
+
+function renderPreview(template: string): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => SAMPLE_VALUES[key] ?? `{{${key}}}`);
+}
+
 function TemplatesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -232,6 +246,7 @@ function TemplatesTab() {
   });
 
   const [editing, setEditing] = useState<Record<string, { template: string; enabled: boolean }>>({});
+  const [previewing, setPreviewing] = useState<Record<string, boolean>>({});
 
   const updateMutation = useMutation({
     mutationFn: ({ eventType, data }: { eventType: string; data: { template?: string; enabled?: boolean } }) =>
@@ -278,8 +293,32 @@ function TemplatesTab() {
                 onChange={(e) => setEditing((prev) => ({ ...prev, [tpl.eventType]: { template: e.target.value, enabled: currentEnabled } }))}
                 className="min-h-[80px] font-mono text-sm resize-none"
               />
+              {previewing[tpl.eventType] && (
+                <div className="rounded-lg border border-blue-600/30 bg-blue-600/5 p-3 space-y-1">
+                  <p className="text-xs font-medium text-blue-400">Preview (sample data)</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                    {renderPreview(currentTemplate)}
+                  </p>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    {renderPreview(currentTemplate).length} chars · {Math.ceil(renderPreview(currentTemplate).length / 160)} SMS
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">{currentTemplate.length} chars</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground">{currentTemplate.length} chars</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPreviewing((p) => ({ ...p, [tpl.eventType]: !p[tpl.eventType] }))}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {previewing[tpl.eventType]
+                      ? <><EyeOff className="h-3.5 w-3.5 mr-1" /> Hide Preview</>
+                      : <><Eye className="h-3.5 w-3.5 mr-1" /> Preview</>
+                    }
+                  </Button>
+                </div>
                 <Button
                   size="sm"
                   onClick={() => {
