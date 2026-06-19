@@ -805,12 +805,17 @@ export const GetIntegrationStatusResponse = zod.object({
 /**
  * @summary Get platform settings
  */
+export const getAdminSettingsResponseExpiryWarningDaysMin = 0;
+
+
+
 export const GetAdminSettingsResponse = zod.object({
   "id": zod.number(),
   "dailyFee": zod.number(),
   "minDays": zod.number(),
   "maxDays": zod.number(),
   "metaApiToken": zod.string().nullish(),
+  "expiryWarningDays": zod.number().min(getAdminSettingsResponseExpiryWarningDaysMin).describe('Days before subscription expiry to send an SMS warning (0 = disabled)'),
   "updatedAt": zod.coerce.date().optional()
 })
 
@@ -822,14 +827,22 @@ export const GetAdminSettingsResponse = zod.object({
 
 export const updateAdminSettingsBodyMaxDaysMax = 365;
 
+export const updateAdminSettingsBodyExpiryWarningDaysMin = 0;
+export const updateAdminSettingsBodyExpiryWarningDaysMax = 30;
+
 
 
 export const UpdateAdminSettingsBody = zod.object({
   "dailyFee": zod.number().min(1).optional(),
   "minDays": zod.number().min(1).optional(),
   "maxDays": zod.number().max(updateAdminSettingsBodyMaxDaysMax).optional(),
-  "metaApiToken": zod.string().nullish()
+  "metaApiToken": zod.string().nullish(),
+  "expiryWarningDays": zod.number().min(updateAdminSettingsBodyExpiryWarningDaysMin).max(updateAdminSettingsBodyExpiryWarningDaysMax).optional()
 })
+
+export const updateAdminSettingsResponseExpiryWarningDaysMin = 0;
+
+
 
 export const UpdateAdminSettingsResponse = zod.object({
   "id": zod.number(),
@@ -837,6 +850,7 @@ export const UpdateAdminSettingsResponse = zod.object({
   "minDays": zod.number(),
   "maxDays": zod.number(),
   "metaApiToken": zod.string().nullish(),
+  "expiryWarningDays": zod.number().min(updateAdminSettingsResponseExpiryWarningDaysMin).describe('Days before subscription expiry to send an SMS warning (0 = disabled)'),
   "updatedAt": zod.coerce.date().optional()
 })
 

@@ -395,6 +395,11 @@ export interface AdminSettings {
   minDays: number;
   maxDays: number;
   metaApiToken?: string | null;
+  /**
+     * Days before subscription expiry to send an SMS warning (0 = disabled)
+     * @minimum 0
+     */
+  expiryWarningDays: number;
   updatedAt?: string;
 }
 
@@ -406,6 +411,11 @@ export interface AdminSettingsUpdate {
   /** @maximum 365 */
   maxDays?: number;
   metaApiToken?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 30
+     */
+  expiryWarningDays?: number;
 }
 
 export interface SchedulerRunLog {

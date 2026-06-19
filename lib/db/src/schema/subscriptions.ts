@@ -9,6 +9,7 @@ export const subscriptionsTable = pgTable("subscriptions", {
   startDate: timestamp("start_date", { withTimezone: true }),
   endDate: timestamp("end_date", { withTimezone: true }),
   daysPaid: integer("days_paid").notNull().default(0),
+  expiryWarningSentAt: timestamp("expiry_warning_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("subscriptions_user_id_idx").on(table.userId),

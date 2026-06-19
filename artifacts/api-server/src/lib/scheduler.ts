@@ -1,6 +1,6 @@
 import cron from "node-cron";
-import { eq, inArray, and, gt } from "drizzle-orm";
-import { db, subscriptionsTable, slaveAccountsTable, bindingsTable, usersTable } from "@workspace/db";
+import { eq, inArray, and } from "drizzle-orm";
+import { db, subscriptionsTable, slaveAccountsTable, bindingsTable, usersTable, adminSettingsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { syncSlaveSubscriberToCopyFactory } from "./metaapi";
 import { notifySubscriptionExpired, notifySubscriptionExpiring } from "./smsNotifier";
@@ -284,11 +284,93 @@ export async function runEnforcementTick(): Promise<void> {
   }
 }
 
+// ─── Expiry warning tick ─────────────────────────────────────────────────────
+
+export async function runExpiryWarningTick(): Promise<void> {
+  const [settings] = await db.select().from(adminSettingsTable).orderBy(adminSettingsTable.id).limit(1);
+  const warningDays = settings?.expiryWarningDays ?? 3;
+
+  if (warningDays === 0) {
+    logger.info("Expiry warning tick skipped — expiryWarningDays is 0 (disabled)");
+    return;
+  }
+
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + warningDays * 24 * 60 * 60 * 1000);
+
+  const activeSubs = await db
+    .select()
+    .from(subscriptionsTable)
+    .where(eq(subscriptionsTable.status, "active"));
+
+  let warned = 0;
+  let skipped = 0;
+
+  for (const sub of activeSubs) {
+    if (!sub.endDate) continue;
+    if (sub.endDate <= now || sub.endDate > windowEnd) continue;
+
+    // Skip if warning was already sent for this subscription period
+    // (warningSentAt exists AND is after the subscription's startDate)
+    if (
+      sub.expiryWarningSentAt &&
+      sub.startDate &&
+      sub.expiryWarningSentAt >= sub.startDate
+    ) {
+      skipped++;
+      continue;
+    }
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, sub.userId))
+      .limit(1);
+
+    if (!user?.phone) continue;
+
+    const daysLeft = Math.max(
+      0,
+      Math.ceil((sub.endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+    );
+    const endDateStr = sub.endDate.toLocaleDateString("en-KE", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    notifySubscriptionExpiring({
+      userId: sub.userId,
+      phone: user.phone,
+      name: user.name,
+      endDate: endDateStr,
+      daysLeft: String(daysLeft),
+    });
+
+    await db
+      .update(subscriptionsTable)
+      .set({ expiryWarningSentAt: now })
+      .where(eq(subscriptionsTable.id, sub.id));
+
+    warned++;
+    logger.info(
+      { userId: sub.userId, subId: sub.id, daysLeft, endDate: sub.endDate },
+      "Expiry warning SMS queued"
+    );
+  }
+
+  logger.info(
+    { warningDays, warned, skipped, windowEnd },
+    "Expiry warning tick complete"
+  );
+}
+
 // ─── Scheduler bootstrap ────────────────────────────────────────────────────
 
 export function startScheduler(): void {
   cron.schedule("*/30 * * * *", () => {
     void runEnforcementTick();
+    void runExpiryWarningTick();
   });
 
   logger.info(

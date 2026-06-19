@@ -8,6 +8,7 @@ export const adminSettingsTable = pgTable("admin_settings", {
   minDays: integer("min_days").notNull().default(1),
   maxDays: integer("max_days").notNull().default(365),
   metaApiToken: text("meta_api_token"),
+  expiryWarningDays: integer("expiry_warning_days").notNull().default(3),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

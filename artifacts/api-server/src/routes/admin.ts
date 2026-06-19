@@ -6,7 +6,7 @@ import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { notifyAccountSuspended, notifyMasterAccountApproved } from "../lib/smsNotifier";
 import { invalidateMetaApiTokenCache } from "../lib/metaapi";
-import { getSchedulerStatus, runEnforcementTick } from "../lib/scheduler";
+import { getSchedulerStatus, runEnforcementTick, runExpiryWarningTick } from "../lib/scheduler";
 import { runPollerNow } from "../lib/accountPoller";
 import { deployMasterToMetaApi, serializeAccount } from "./masterAccounts";
 import { serializeAccount as serializeSlaveAccount } from "./slaveAccounts";
@@ -198,6 +198,7 @@ router.patch("/admin/settings", authenticate, requireAdmin, async (req, res): Pr
   if (parsed.data.minDays != null) updates.minDays = parsed.data.minDays;
   if (parsed.data.maxDays != null) updates.maxDays = parsed.data.maxDays;
   if ("metaApiToken" in parsed.data) updates.metaApiToken = parsed.data.metaApiToken ?? null;
+  if (parsed.data.expiryWarningDays != null) updates.expiryWarningDays = parsed.data.expiryWarningDays;
 
   let settings;
   if (!existing) {

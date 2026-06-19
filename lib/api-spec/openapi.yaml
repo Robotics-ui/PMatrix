@@ -1515,7 +1515,7 @@ components:
 
     AdminSettings:
       type: object
-      required: [id, dailyFee, minDays, maxDays]
+      required: [id, dailyFee, minDays, maxDays, expiryWarningDays]
       properties:
         id:
           type: integer
@@ -1528,6 +1528,10 @@ components:
         metaApiToken:
           type: string
           nullable: true
+        expiryWarningDays:
+          type: integer
+          minimum: 0
+          description: Days before subscription expiry to send an SMS warning (0 = disabled)
         updatedAt:
           type: string
           format: date-time
@@ -1547,6 +1551,10 @@ components:
         metaApiToken:
           type: string
           nullable: true
+        expiryWarningDays:
+          type: integer
+          minimum: 0
+          maximum: 30
 
     SchedulerRunLog:
       type: object

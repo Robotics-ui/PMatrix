@@ -1156,6 +1156,7 @@ export default function AdminPage() {
   const [dailyFee, setDailyFee] = useState("");
   const [minDays, setMinDays] = useState("");
   const [maxDays, setMaxDays] = useState("");
+  const [expiryWarningDays, setExpiryWarningDays] = useState("3");
   const [metaApiToken, setMetaApiToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -1183,6 +1184,7 @@ export default function AdminPage() {
       setDailyFee(String(settings.dailyFee ?? 100));
       setMinDays(String(settings.minDays ?? 1));
       setMaxDays(String(settings.maxDays ?? 365));
+      setExpiryWarningDays(String(settings.expiryWarningDays ?? 3));
       setMetaApiToken(settings.metaApiToken ?? "");
     }
   }, [settings]);
@@ -1205,6 +1207,7 @@ export default function AdminPage() {
         dailyFee: parseFloat(dailyFee),
         minDays: parseInt(minDays),
         maxDays: parseInt(maxDays),
+        expiryWarningDays: parseInt(expiryWarningDays),
         metaApiToken: metaApiToken.trim() || null,
       },
     });
@@ -1451,6 +1454,20 @@ export default function AdminPage() {
                     <Label>Max Days</Label>
                     <Input type="number" min="1" max="365" value={maxDays} onChange={(e) => setMaxDays(e.target.value)} />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Expiry Warning (days before)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="30"
+                    value={expiryWarningDays}
+                    onChange={(e) => setExpiryWarningDays(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Send a <code className="bg-muted px-1 rounded">subscription_expiring</code> SMS this many days before a subscription ends.
+                    Set to <strong>0</strong> to disable.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>MetaApi Token</Label>
