@@ -14,6 +14,7 @@ export const slaveAccountsTable = pgTable("slave_accounts", {
   status: text("status").notNull().default("connecting"),
   deploymentStatus: text("deployment_status"),
   connectionStatus: text("connection_status"),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("slave_accounts_user_id_idx").on(table.userId),

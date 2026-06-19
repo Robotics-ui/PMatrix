@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
+import { startAccountPoller } from "./lib/accountPoller";
+import { startReconnectWorker } from "./lib/reconnectWorker";
 import { seedDefaultAccounts } from "./lib/seed";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -87,5 +89,9 @@ void seedDefaultAccounts();
 
 // Start the subscription expiry scheduler
 startScheduler();
+// Start MetaApi account status poller (every 30s)
+startAccountPoller();
+// Start MetaApi reconnect worker (every 5min)
+startReconnectWorker();
 
 export default app;

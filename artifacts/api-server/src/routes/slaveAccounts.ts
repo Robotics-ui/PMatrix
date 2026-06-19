@@ -4,7 +4,7 @@ import { db, slaveAccountsTable, subscriptionsTable } from "@workspace/db";
 import { CreateSlaveAccountBody, DeleteSlaveAccountParams, RefreshSlaveAccountStatusParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { encryptCredential } from "../lib/auth";
-import { getMetaApiToken } from "../lib/metaapi";
+import { getMetaApiToken, mapMetaApiState } from "../lib/metaapi";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -17,25 +17,7 @@ type MetaApiAccountState = {
   connectionStatus: string;
 };
 
-function mapMetaApiState(state: string): string {
-  switch (state.toUpperCase()) {
-    case "DEPLOYING":
-      return "deploying";
-    case "DEPLOYED":
-    case "CONNECTING":
-    case "SYNCHRONIZING":
-      return "connecting";
-    case "CONNECTED":
-      return "connected";
-    case "DISCONNECTED":
-    case "UNDEPLOYING":
-      return "disconnected";
-    default:
-      return "connecting";
-  }
-}
-
-function serializeAccount(a: typeof slaveAccountsTable.$inferSelect) {
+export function serializeAccount(a: typeof slaveAccountsTable.$inferSelect) {
   return {
     id: a.id,
     userId: a.userId,
@@ -207,6 +189,7 @@ router.get("/slave-accounts/:id/refresh-status", authenticate, async (req, res):
         status: newStatus,
         deploymentStatus: data.state ?? null,
         connectionStatus: data.connectionStatus ?? null,
+        lastCheckedAt: new Date(),
       })
       .where(eq(slaveAccountsTable.id, account.id))
       .returning();

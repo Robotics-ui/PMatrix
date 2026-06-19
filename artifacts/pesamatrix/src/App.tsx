@@ -28,6 +28,7 @@ import ResetPasswordPage from "@/pages/reset-password";
 import AboutPage from "@/pages/about";
 import ContactsPage from "@/pages/contacts";
 import LandingPage from "@/pages/landing";
+import DiagnosticsPage from "@/pages/diagnostics";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +67,7 @@ function Router() {
       <Route path="/admin/news" component={AdminNewsPage} />
       <Route path="/admin/resources" component={AdminResourcesPage} />
       <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
+      <Route path="/admin/diagnostics" component={DiagnosticsPage} />
       <Route path="/change-password" component={ChangePasswordPage} />
       <Route path="/market" component={MarketPulsePage} />
       <Route path="/forgot-password" component={() => <GuestRoute component={ForgotPasswordPage} />} />

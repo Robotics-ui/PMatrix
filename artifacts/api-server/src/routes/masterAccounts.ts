@@ -4,7 +4,7 @@ import { db, masterAccountsTable } from "@workspace/db";
 import { CreateMasterAccountBody, GetMasterAccountParams, DeleteMasterAccountParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { encryptCredential } from "../lib/auth";
-import { getMetaApiToken } from "../lib/metaapi";
+import { getMetaApiToken, mapMetaApiState } from "../lib/metaapi";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -16,24 +16,6 @@ type MetaApiAccountState = {
   state: string;
   connectionStatus: string;
 };
-
-export function mapMetaApiState(state: string): string {
-  switch (state.toUpperCase()) {
-    case "DEPLOYING":
-      return "deploying";
-    case "DEPLOYED":
-    case "CONNECTING":
-    case "SYNCHRONIZING":
-      return "connecting";
-    case "CONNECTED":
-      return "connected";
-    case "DISCONNECTED":
-    case "UNDEPLOYING":
-      return "disconnected";
-    default:
-      return "connecting";
-  }
-}
 
 export function serializeAccount(a: typeof masterAccountsTable.$inferSelect) {
   return {
@@ -202,6 +184,7 @@ router.get("/master-accounts/:id/refresh-status", authenticate, async (req, res)
         status: newStatus,
         deploymentStatus: data.state ?? null,
         connectionStatus: data.connectionStatus ?? null,
+        lastCheckedAt: new Date(),
       })
       .where(eq(masterAccountsTable.id, account.id))
       .returning();

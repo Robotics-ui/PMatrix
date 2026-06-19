@@ -2,6 +2,36 @@ import { db, adminSettingsTable, bindingsTable, strategiesTable, slaveAccountsTa
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
 
+/**
+ * Maps a raw MetaApi state string to a PESAMATRIX internal status string.
+ * MetaApi states (in rough lifecycle order):
+ *   DEPLOYING → DEPLOYED → CONNECTING → SYNCHRONIZING → CONNECTED
+ *   DISCONNECTING → DISCONNECTED → UNDEPLOYING
+ *   FAILED
+ */
+export function mapMetaApiState(state: string): string {
+  switch (state.toUpperCase()) {
+    case "DEPLOYING":
+    case "DEPLOYED":
+      return "deploying";
+    case "CONNECTING":
+      return "connecting";
+    case "SYNCHRONIZING":
+      return "synchronizing";
+    case "CONNECTED":
+      return "connected";
+    case "DISCONNECTING":
+    case "DISCONNECTED":
+    case "UNDEPLOYING":
+      return "disconnected";
+    case "FAILED":
+    case "ERROR":
+      return "failed";
+    default:
+      return "connecting";
+  }
+}
+
 let cachedToken: string | null | undefined = undefined;
 let cacheExpiry = 0;
 const CACHE_TTL_MS = 30_000;

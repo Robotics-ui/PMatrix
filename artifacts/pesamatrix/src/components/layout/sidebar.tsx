@@ -19,6 +19,7 @@ import {
   Image,
   Info,
   Phone,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,6 +40,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: "/admin", label: "Admin Panel", icon: Shield },
+  { href: "/admin/diagnostics", label: "MetaApi Diagnostics", icon: Activity },
   { href: "/admin/media-center", label: "Media Center", icon: Image },
   { href: "/admin/news", label: "Trading News", icon: Newspaper },
   { href: "/admin/resources", label: "Resources", icon: BookOpen },

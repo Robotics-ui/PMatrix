@@ -6,7 +6,9 @@ import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { invalidateMetaApiTokenCache } from "../lib/metaapi";
 import { getSchedulerStatus, runEnforcementTick } from "../lib/scheduler";
+import { runPollerNow } from "../lib/accountPoller";
 import { deployMasterToMetaApi, serializeAccount } from "./masterAccounts";
+import { serializeAccount as serializeSlaveAccount } from "./slaveAccounts";
 import { decryptCredential } from "../lib/auth";
 
 const router = Router();
@@ -344,6 +346,60 @@ router.get("/admin/scheduler-status", authenticate, requireAdmin, async (_req, r
 router.post("/admin/scheduler/run", authenticate, requireAdmin, async (_req, res): Promise<void> => {
   void runEnforcementTick();
   res.json({ message: "Enforcement tick triggered" });
+});
+
+router.post("/admin/poller/run", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  void runPollerNow();
+  res.json({ message: "Account poller tick triggered" });
+});
+
+router.get("/admin/diagnostics", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  const [masters, slaves] = await Promise.all([
+    db.select().from(masterAccountsTable),
+    db.select().from(slaveAccountsTable),
+  ]);
+
+  const users = await db.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name }).from(usersTable);
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  const countBy = <T extends { status: string }>(arr: T[], status: string) =>
+    arr.filter((a) => a.status === status).length;
+
+  res.json({
+    summary: {
+      masters: {
+        total: masters.length,
+        connected: countBy(masters, "connected"),
+        synchronizing: countBy(masters, "synchronizing"),
+        connecting: countBy(masters, "connecting"),
+        deploying: countBy(masters, "deploying"),
+        disconnected: countBy(masters, "disconnected"),
+        failed: countBy(masters, "failed"),
+        pending_approval: countBy(masters, "pending_approval"),
+        rejected: countBy(masters, "rejected"),
+      },
+      slaves: {
+        total: slaves.length,
+        connected: countBy(slaves, "connected"),
+        synchronizing: countBy(slaves, "synchronizing"),
+        connecting: countBy(slaves, "connecting"),
+        deploying: countBy(slaves, "deploying"),
+        disconnected: countBy(slaves, "disconnected"),
+        failed: countBy(slaves, "failed"),
+        suspended: countBy(slaves, "suspended"),
+      },
+    },
+    masters: masters.map((a) => ({
+      ...serializeAccount(a),
+      lastCheckedAt: a.lastCheckedAt ?? null,
+      userEmail: userMap.get(a.userId)?.email ?? null,
+    })),
+    slaves: slaves.map((a) => ({
+      ...serializeSlaveAccount(a),
+      lastCheckedAt: a.lastCheckedAt ?? null,
+      userEmail: userMap.get(a.userId)?.email ?? null,
+    })),
+  });
 });
 
 router.get("/admin/integration-status", authenticate, requireAdmin, async (_req, res): Promise<void> => {

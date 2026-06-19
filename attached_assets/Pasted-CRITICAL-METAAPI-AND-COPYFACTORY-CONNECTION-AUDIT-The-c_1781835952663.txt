@@ -1,0 +1,239 @@
+CRITICAL METAAPI AND COPYFACTORY CONNECTION AUDIT
+
+The current system is not functioning correctly.
+
+Master accounts and slave accounts remain stuck in "CONNECTING" status and are not reaching a fully connected and synchronized state.
+
+Perform a complete audit and repair of the MetaApi and CopyFactory integration.
+
+CURRENT ISSUE
+
+Symptoms:
+
+- Master accounts remain on CONNECTING.
+- Slave accounts remain on CONNECTING.
+- Accounts are not reaching DEPLOYED and CONNECTED state.
+- CopyFactory subscribers are not becoming active.
+- Strategy bindings cannot be verified.
+
+This must be investigated and fixed.
+
+---
+
+STEP 1: VERIFY METAAPI ACCOUNT CREATION
+
+For every master and slave account:
+
+Verify:
+
+- MetaApi account is actually created.
+- MetaApi account ID is stored in database.
+- Deployment is initiated.
+- Deployment status is tracked.
+- Synchronization status is tracked.
+- Connection status is tracked.
+
+Provide logs showing:
+
+- Account creation
+- Deployment
+- Synchronization
+- Connection
+
+---
+
+STEP 2: VERIFY DEPLOYMENT WORKFLOW
+
+The system must follow:
+
+Create Account
+↓
+Deploy Account
+↓
+Wait for Deployment Complete
+↓
+Wait for Synchronization
+↓
+Verify Connected
+↓
+Update Status
+
+Do not display CONNECTED until MetaApi confirms connection.
+
+---
+
+STEP 3: VERIFY STATUS POLLING
+
+Implement automatic polling.
+
+Every 30 seconds:
+
+Check MetaApi account status.
+
+Update database with:
+
+- DEPLOYING
+- SYNCHRONIZING
+- CONNECTED
+- DISCONNECTED
+- FAILED
+
+Frontend must show actual MetaApi status.
+
+---
+
+STEP 4: VERIFY COPYFACTORY
+
+Verify:
+
+- Strategy creation
+- Subscriber creation
+- Subscriber binding
+- Subscriber unbinding
+
+Confirm:
+
+- Strategy IDs are stored
+- Subscriber IDs are stored
+
+Provide logs.
+
+---
+
+STEP 5: IMPLEMENT CONNECTION DIAGNOSTICS
+
+Create a diagnostics page.
+
+Display:
+
+Master Accounts:
+
+- Account ID
+- MetaApi Account ID
+- Deployment Status
+- Connection Status
+- Synchronization Status
+- Last Check Time
+
+Slave Accounts:
+
+- Account ID
+- Subscriber ID
+- Deployment Status
+- Connection Status
+- Synchronization Status
+- Last Check Time
+
+---
+
+STEP 6: ADD RECONNECT WORKER
+
+Create a background worker.
+
+Every 5 minutes:
+
+Scan all accounts.
+
+If status is:
+
+FAILED
+DISCONNECTED
+STALLED
+
+Automatically:
+
+- Retry deployment
+- Retry synchronization
+- Retry connection
+
+Log all retries.
+
+---
+
+STEP 7: PERFORMANCE TARGET
+
+The platform must be designed for:
+
+- 2,000 active slave accounts
+- Multiple master accounts
+- Hundreds of simultaneous users
+
+Requirements:
+
+- No Redis
+- PostgreSQL only
+- Efficient database queries
+- Batch processing
+- Background workers
+- Connection pooling
+
+The application must not poll MetaApi excessively.
+
+Implement scalable status monitoring.
+
+---
+
+STEP 8: COPYFACTORY SCALE TEST
+
+Simulate:
+
+- 1 Master
+- 100 Subscribers
+
+Then:
+
+- 1 Master
+- 500 Subscribers
+
+Then:
+
+- 1 Master
+- 2,000 Subscribers
+
+Verify:
+
+- Strategy creation
+- Subscriber creation
+- Binding performance
+- Unbinding performance
+
+Provide results.
+
+---
+
+STEP 9: FRONTEND FIX
+
+Replace permanent CONNECTING status.
+
+Show:
+
+PENDING_APPROVAL
+DEPLOYING
+SYNCHRONIZING
+CONNECTED
+DISCONNECTED
+FAILED
+
+Use color indicators.
+
+Show actual status returned by MetaApi.
+
+---
+
+STEP 10: FINAL REPORT
+
+Provide:
+
+- Root cause of connection issue
+- Files inspected
+- Files modified
+- Database changes
+- API changes
+- Worker changes
+- Test results
+
+Do not stop at reporting.
+
+Continue until master accounts and slave accounts successfully connect, synchronize, and operate correctly through MetaApi CopyFactory.
+
+The final system must be capable of supporting 2,000 active slave accounts while maintaining reliable cloud-to-cloud copy trading.

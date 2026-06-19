@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, Plus, Trash2, RefreshCw, AlertCircle, Info } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-const SETTLED_STATUSES = new Set(["connected", "disconnected", "suspended"]);
+const SETTLED_STATUSES = new Set(["connected", "disconnected", "failed", "suspended"]);
 const POLL_INTERVAL_MS = 10_000;
 
 function isPolling(status?: string | null): boolean {
@@ -26,9 +26,11 @@ function isPolling(status?: string | null): boolean {
 
 function StatusBadge({ status }: { status?: string | null }) {
   if (status === "connected") return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connected</Badge>;
-  if (status === "deploying") return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Deploying</Badge>;
+  if (status === "synchronizing") return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Synchronizing</Badge>;
+  if (status === "deploying") return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Deploying</Badge>;
   if (status === "connecting") return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Connecting</Badge>;
   if (status === "disconnected") return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Disconnected</Badge>;
+  if (status === "failed") return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Failed</Badge>;
   if (status === "suspended") return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Suspended</Badge>;
   return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">{status ?? "error"}</Badge>;
 }
