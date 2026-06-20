@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Send, Settings, FileText, List, RefreshCw, Eye, EyeOff, CheckCircle, XCircle, ShieldCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-const token = () => localStorage.getItem("auth_token") ?? "";
+const token = () => localStorage.getItem("token") ?? "";
 
 async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
