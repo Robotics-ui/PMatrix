@@ -17,7 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { GitBranch, Plus, Trash2, RefreshCw, AlertCircle, Server, Clock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-const BLOCKED_STATUSES = new Set(["pending_approval", "rejected"]);
+// Masters must be at least deployed before a strategy can be created
+const STRATEGY_ELIGIBLE_STATUSES = new Set(["deployed", "strategy_created", "active"]);
 
 export default function StrategiesPage() {
   const qc = useQueryClient();
@@ -28,9 +29,11 @@ export default function StrategiesPage() {
   const [form, setForm] = useState({ strategyName: "", masterAccountId: 0 });
   const [error, setError] = useState("");
 
-  const approvedMasters = (masterAccounts ?? []).filter((m) => !BLOCKED_STATUSES.has(m.status ?? ""));
-  const hasPendingMasters = (masterAccounts ?? []).some((m) => m.status === "pending_approval");
-  const hasApproved = approvedMasters.length > 0;
+  const eligibleMasters = (masterAccounts ?? []).filter((m) => STRATEGY_ELIGIBLE_STATUSES.has(m.status ?? ""));
+  const hasPendingMasters = (masterAccounts ?? []).some((m) =>
+    ["pending_approval", "approved", "deploying", "connecting", "synchronizing"].includes(m.status ?? "")
+  );
+  const hasEligible = eligibleMasters.length > 0;
 
   const { mutate: create, isPending: creating } = useCreateStrategy({
     mutation: {
@@ -60,7 +63,7 @@ export default function StrategiesPage() {
             <h1 className="text-2xl font-bold text-foreground">Strategies</h1>
             <p className="text-sm text-muted-foreground mt-1">CopyFactory strategies defining how trades are copied</p>
           </div>
-          <Button onClick={() => { setError(""); setOpen(true); }} className="bg-blue-600 hover:bg-blue-700" disabled={!hasApproved}>
+          <Button onClick={() => { setError(""); setOpen(true); }} className="bg-blue-600 hover:bg-blue-700" disabled={!hasEligible}>
             <Plus className="h-4 w-4 mr-2" /> New Strategy
           </Button>
         </div>
@@ -76,12 +79,12 @@ export default function StrategiesPage() {
           </Card>
         )}
 
-        {masterAccounts?.length && !hasApproved && hasPendingMasters && (
-          <Card className="border-purple-500/30 bg-purple-500/5">
+        {masterAccounts?.length && !hasEligible && hasPendingMasters && (
+          <Card className="border-yellow-500/30 bg-yellow-500/5">
             <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 text-sm text-purple-300">
+              <div className="flex items-center gap-2 text-sm text-yellow-300">
                 <Clock className="h-4 w-4 shrink-0" />
-                <p>Your master account is pending admin approval. Strategies can be created once an account is approved and deployed.</p>
+                <p>Your master account is being reviewed or deployed. Strategies can be created once an account reaches <span className="font-semibold">Deployed</span> status.</p>
               </div>
             </CardContent>
           </Card>
@@ -97,7 +100,7 @@ export default function StrategiesPage() {
               <GitBranch className="h-12 w-12 text-muted-foreground/30 mb-4" />
               <h3 className="font-semibold text-foreground">No strategies yet</h3>
               <p className="text-sm text-muted-foreground mt-1">Create a CopyFactory strategy to start copying</p>
-              <Button onClick={() => setOpen(true)} className="mt-4 bg-blue-600 hover:bg-blue-700" disabled={!hasApproved}>
+              <Button onClick={() => setOpen(true)} className="mt-4 bg-blue-600 hover:bg-blue-700" disabled={!hasEligible}>
                 <Plus className="h-4 w-4 mr-2" /> New Strategy
               </Button>
             </CardContent>
@@ -106,13 +109,14 @@ export default function StrategiesPage() {
           <div className="grid gap-4">
             {strategies.map((s) => {
               const master = masterAccounts?.find((m) => m.id === s.masterAccountId);
+              const masterIsActive = master?.status === "active";
               return (
-                <Card key={s.id} className="border-border hover:border-blue-600/30 transition-colors">
+                <Card key={s.id} className={`border-border transition-colors ${masterIsActive ? "hover:border-green-500/30" : "hover:border-blue-600/30"}`}>
                   <CardContent className="py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-lg bg-green-600/10 flex items-center justify-center shrink-0">
-                          <GitBranch className="h-5 w-5 text-green-400" />
+                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${masterIsActive ? "bg-green-600/10" : "bg-blue-600/10"}`}>
+                          <GitBranch className={`h-5 w-5 ${masterIsActive ? "text-green-400" : "text-blue-400"}`} />
                         </div>
                         <div>
                           <p className="font-semibold text-foreground">{s.strategyName}</p>
@@ -125,11 +129,20 @@ export default function StrategiesPage() {
                           {s.copyfactoryStrategyId && (
                             <p className="text-xs text-muted-foreground font-mono mt-0.5">CF: {s.copyfactoryStrategyId}</p>
                           )}
+                          {master && !masterIsActive && (
+                            <p className="text-xs text-orange-400 mt-0.5">
+                              Master not active ({master.status}) — subscribers cannot bind
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge className={s.status === "active" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"}>
-                          {s.status ?? "pending"}
+                        <Badge className={
+                          s.status === "active" && masterIsActive
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                        }>
+                          {s.status === "active" && masterIsActive ? "active" : s.status === "active" ? "master not ready" : (s.status ?? "pending")}
                         </Badge>
                         <Button
                           variant="ghost"
@@ -170,13 +183,17 @@ export default function StrategiesPage() {
                   value={form.masterAccountId}
                   onChange={(e) => setForm({ ...form, masterAccountId: parseInt(e.target.value) })}
                 >
-                  <option value={0}>Select approved master account...</option>
-                  {approvedMasters.map((m) => (
-                    <option key={m.id} value={m.id}>{m.mt5Login} — {m.broker}</option>
+                  <option value={0}>Select deployed master account...</option>
+                  {eligibleMasters.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.mt5Login} — {m.broker} ({m.status})
+                    </option>
                   ))}
                 </select>
-                {!approvedMasters.length && (
-                  <p className="text-xs text-muted-foreground">Only approved master accounts can be used for strategies.</p>
+                {!eligibleMasters.length && (
+                  <p className="text-xs text-muted-foreground">
+                    Master accounts must reach <span className="font-semibold">Deployed</span> status before a strategy can be created.
+                  </p>
                 )}
               </div>
             </div>

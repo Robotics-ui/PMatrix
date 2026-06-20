@@ -17,7 +17,19 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Server, Plus, Trash2, RefreshCw, AlertCircle, Clock, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-const SETTLED_STATUSES = new Set(["connected", "disconnected", "failed", "pending_approval", "pending", "rejected"]);
+const SETTLED_STATUSES = new Set([
+  "pending_approval",
+  "approved",
+  "deployed",
+  "strategy_created",
+  "active",
+  "suspended",
+  "failed",
+  "rejected",
+  "disconnected",
+  "pending",
+]);
+
 const POLL_INTERVAL_MS = 10_000;
 
 function isPolling(status?: string | null): boolean {
@@ -25,16 +37,36 @@ function isPolling(status?: string | null): boolean {
 }
 
 function StatusBadge({ status }: { status?: string | null }) {
-  if (status === "connected") return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connected</Badge>;
-  if (status === "synchronizing") return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Synchronizing</Badge>;
-  if (status === "deploying") return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Deploying</Badge>;
-  if (status === "connecting") return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Connecting</Badge>;
-  if (status === "disconnected") return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Disconnected</Badge>;
-  if (status === "failed") return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Failed</Badge>;
-  if (status === "pending_approval") return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Pending Approval</Badge>;
-  if (status === "pending") return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">Pending</Badge>;
-  if (status === "rejected") return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Rejected</Badge>;
-  return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">{status ?? "unknown"}</Badge>;
+  switch (status) {
+    case "pending_approval":
+      return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">Pending Approval</Badge>;
+    case "approved":
+      return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Approved</Badge>;
+    case "deploying":
+      return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Deploying</Badge>;
+    case "connecting":
+      return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Connecting</Badge>;
+    case "synchronizing":
+      return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Synchronizing</Badge>;
+    case "deployed":
+      return <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">Deployed</Badge>;
+    case "strategy_created":
+      return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Strategy Created</Badge>;
+    case "active":
+      return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>;
+    case "suspended":
+      return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Suspended</Badge>;
+    case "failed":
+      return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Failed</Badge>;
+    case "rejected":
+      return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Rejected</Badge>;
+    case "disconnected":
+      return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Disconnected</Badge>;
+    case "pending":
+      return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">Pending</Badge>;
+    default:
+      return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">{status ?? "Unknown"}</Badge>;
+  }
 }
 
 function RefreshButton({ accountId }: { accountId: number }) {
@@ -148,14 +180,13 @@ export default function MasterAccountsPage() {
           </div>
         </div>
 
-        {/* Approval notice */}
         <Card className="border-purple-500/20 bg-purple-500/5">
           <CardContent className="py-3">
             <div className="flex items-start gap-2 text-sm text-purple-300">
               <Clock className="h-4 w-4 mt-0.5 shrink-0" />
               <p>
-                Master accounts require admin approval before they are deployed to MetaApi and made available for strategies.
-                Slave accounts deploy immediately without approval.
+                Master accounts go through a lifecycle: Pending Approval → Approved → Deploying → Deployed → Strategy Created → Active.
+                Only <span className="font-semibold text-green-400">Active</span> accounts can accept subscribers.
               </p>
             </div>
           </CardContent>
@@ -182,12 +213,16 @@ export default function MasterAccountsPage() {
               const settling = !!acc.metaapiAccountId && isPolling(acc.status);
               const isPendingApproval = acc.status === "pending_approval";
               const isRejected = acc.status === "rejected";
+              const isActive = acc.status === "active";
+              const isSuspended = acc.status === "suspended";
               return (
                 <Card
                   key={acc.id}
                   className={`border-border transition-colors ${
+                    isActive ? "border-green-500/20 hover:border-green-500/30" :
+                    isSuspended ? "border-orange-500/20 hover:border-orange-500/30" :
                     settling ? "border-blue-600/20 hover:border-blue-600/30" :
-                    isPendingApproval ? "border-purple-500/20 hover:border-purple-500/30" :
+                    isPendingApproval ? "border-gray-500/20 hover:border-gray-500/30" :
                     isRejected ? "border-red-500/20 hover:border-red-500/30" :
                     "hover:border-blue-600/30"
                   }`}
@@ -196,12 +231,16 @@ export default function MasterAccountsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-4 min-w-0">
                         <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${
-                          isPendingApproval ? "bg-purple-500/10" :
+                          isActive ? "bg-green-500/10" :
+                          isSuspended ? "bg-orange-500/10" :
+                          isPendingApproval ? "bg-gray-500/10" :
                           isRejected ? "bg-red-500/10" :
                           "bg-blue-600/10"
                         }`}>
                           <Server className={`h-5 w-5 ${
-                            isPendingApproval ? "text-purple-400" :
+                            isActive ? "text-green-400" :
+                            isSuspended ? "text-orange-400" :
+                            isPendingApproval ? "text-gray-400" :
                             isRejected ? "text-red-400" :
                             "text-blue-400"
                           }`} />
@@ -214,7 +253,7 @@ export default function MasterAccountsPage() {
                               MetaApi ID: {acc.metaapiAccountId}
                             </p>
                           ) : isPendingApproval ? (
-                            <p className="text-xs text-purple-400">Awaiting admin review</p>
+                            <p className="text-xs text-gray-400">Awaiting admin review</p>
                           ) : isRejected ? null : (
                             <p className="text-xs text-red-400">No MetaApi ID — creation failed</p>
                           )}
@@ -260,6 +299,14 @@ export default function MasterAccountsPage() {
                               </p>
                             </div>
                           )}
+                          {isSuspended && (
+                            <div className="flex items-start gap-1.5 mt-1">
+                              <AlertCircle className="h-3.5 w-3.5 text-orange-400 shrink-0 mt-0.5" />
+                              <p className="text-xs text-orange-300">
+                                Account suspended — MetaApi connection lost. Will reactivate automatically when connection is restored.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -281,7 +328,6 @@ export default function MasterAccountsPage() {
           </div>
         )}
 
-        {/* Add dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="dark bg-card border-border">
             <DialogHeader>
@@ -295,7 +341,7 @@ export default function MasterAccountsPage() {
               )}
               <div className="flex items-start gap-2 p-3 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
                 <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                Your account details will be reviewed by an admin. You will see the status update once approved or rejected.
+                Your account details will be reviewed by an admin. Once approved and deployed, the account will go through the full activation lifecycle before accepting subscribers.
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -331,7 +377,6 @@ export default function MasterAccountsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete confirm */}
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
           <AlertDialogContent className="dark bg-card border-border">
             <AlertDialogHeader>

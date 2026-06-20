@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, bindingsTable, subscriptionsTable, slaveAccountsTable, strategiesTable } from "@workspace/db";
+import { db, bindingsTable, subscriptionsTable, slaveAccountsTable, strategiesTable, masterAccountsTable } from "@workspace/db";
 import { CreateBindingBody, DeleteBindingParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
@@ -20,7 +20,6 @@ router.get("/bindings", authenticate, async (req, res): Promise<void> => {
     return;
   }
 
-  // Use inArray to fetch all bindings in a single query (avoid N+1)
   const allBindings = await db
     .select()
     .from(bindingsTable)
@@ -65,6 +64,33 @@ router.post("/bindings", authenticate, async (req, res): Promise<void> => {
     return;
   }
 
+  // Verify master account is ACTIVE with healthy connection before allowing any binding
+  const [master] = await db
+    .select()
+    .from(masterAccountsTable)
+    .where(eq(masterAccountsTable.id, strategy.masterAccountId));
+
+  const masterIsActive =
+    master &&
+    master.status === "active" &&
+    master.connectionStatus === "CONNECTED" &&
+    master.deploymentStatus === "DEPLOYED";
+
+  if (!masterIsActive) {
+    res.status(400).json({
+      error: "This strategy is not yet active and cannot accept subscribers.",
+    });
+    return;
+  }
+
+  // Verify strategy itself is active
+  if (strategy.status !== "active") {
+    res.status(400).json({
+      error: "This strategy is not yet active and cannot accept subscribers.",
+    });
+    return;
+  }
+
   // Verify slave account belongs to user
   const [slave] = await db
     .select()
@@ -86,7 +112,6 @@ router.post("/bindings", authenticate, async (req, res): Promise<void> => {
     })
     .returning();
 
-  // Sync to CopyFactory — push all active bindings for this slave to MetaApi
   await syncSlaveSubscriberToCopyFactory(slaveAccountId);
 
   res.status(201).json({
@@ -102,7 +127,6 @@ router.delete("/bindings/:id", authenticate, async (req, res): Promise<void> => 
     return;
   }
 
-  // Verify ownership: the binding's strategy must belong to this user
   const [existing] = await db
     .select({ id: bindingsTable.id, slaveAccountId: bindingsTable.slaveAccountId, strategyId: bindingsTable.strategyId })
     .from(bindingsTable)
@@ -113,7 +137,6 @@ router.delete("/bindings/:id", authenticate, async (req, res): Promise<void> => 
     return;
   }
 
-  // Confirm the strategy (and thus the binding) belongs to this user
   const [ownerStrategy] = await db
     .select({ id: strategiesTable.id })
     .from(strategiesTable)
@@ -126,7 +149,6 @@ router.delete("/bindings/:id", authenticate, async (req, res): Promise<void> => 
 
   await db.delete(bindingsTable).where(eq(bindingsTable.id, params.data.id));
 
-  // Sync to CopyFactory — remaining active bindings (may be empty)
   await syncSlaveSubscriberToCopyFactory(existing.slaveAccountId);
 
   res.sendStatus(204);

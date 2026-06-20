@@ -4,12 +4,13 @@ import { db, strategiesTable, masterAccountsTable, bindingsTable, slaveAccountsT
 import { CreateStrategyBody, DeleteStrategyParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { getMetaApiToken, syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
+import { writeAuditLog } from "../lib/accountPoller";
 import { logger } from "../lib/logger";
 
 const router = Router();
 
-// Statuses that block strategy creation on a master account
-const BLOCKED_STATUSES = new Set(["pending_approval", "rejected", "suspended"]);
+// Statuses that allow strategy creation (master must be at least deployed by MetaApi)
+const STRATEGY_ALLOWED_STATUSES = new Set(["deployed", "strategy_created", "active"]);
 
 router.get("/strategies", authenticate, async (req, res): Promise<void> => {
   const strategies = await db
@@ -39,13 +40,32 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
     return;
   }
 
-  if (BLOCKED_STATUSES.has(masterAccount.status)) {
-    const reason =
-      masterAccount.status === "pending_approval"
-        ? "Master account is pending admin approval. Strategies can only be created once the account is approved and deployed."
-        : masterAccount.status === "suspended"
-          ? "Master account is suspended and cannot be used for strategies."
-          : "Master account was rejected and cannot be used for strategies.";
+  if (!STRATEGY_ALLOWED_STATUSES.has(masterAccount.status)) {
+    let reason: string;
+    switch (masterAccount.status) {
+      case "pending_approval":
+        reason = "Master account is pending admin approval. Strategies can only be created once the account is deployed.";
+        break;
+      case "approved":
+        reason = "Master account is approved and awaiting deployment to MetaApi. Please wait for deployment to complete.";
+        break;
+      case "deploying":
+      case "connecting":
+      case "synchronizing":
+        reason = "Master account is currently being deployed. Please wait for deployment to complete.";
+        break;
+      case "failed":
+        reason = "Master account deployment failed. Contact an admin for assistance.";
+        break;
+      case "rejected":
+        reason = "Master account was rejected and cannot be used for strategies.";
+        break;
+      case "suspended":
+        reason = "Master account is suspended. Strategies cannot be created while the account is suspended.";
+        break;
+      default:
+        reason = "Master account is not ready for strategy creation.";
+    }
     res.status(400).json({ error: reason });
     return;
   }
@@ -73,6 +93,7 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
       );
       if (response.ok) {
         copyfactoryStrategyId = stratId;
+        logger.info({ stratId, masterAccountId }, "CopyFactory strategy created");
       } else {
         logger.warn({ status: response.status, stratId }, "CopyFactory strategy creation returned non-OK");
       }
@@ -91,6 +112,24 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
       status: "active",
     })
     .returning();
+
+  // Advance master from 'deployed' → 'strategy_created' when first strategy is created
+  if (masterAccount.status === "deployed") {
+    await db
+      .update(masterAccountsTable)
+      .set({ status: "strategy_created" })
+      .where(eq(masterAccountsTable.id, masterAccountId));
+
+    await writeAuditLog({
+      masterAccountId,
+      userId: req.userId!,
+      event: "strategy_created",
+      fromStatus: "deployed",
+      toStatus: "strategy_created",
+    });
+
+    logger.info({ masterAccountId }, "Master account advanced to strategy_created after strategy creation");
+  }
 
   res.status(201).json(strategy);
 });
@@ -112,7 +151,6 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
     return;
   }
 
-  // Collect affected slave accounts before deleting bindings
   const affectedBindings = await db
     .select({ slaveAccountId: bindingsTable.slaveAccountId })
     .from(bindingsTable)
@@ -120,15 +158,12 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
 
   const affectedSlaveIds = [...new Set(affectedBindings.map((b) => b.slaveAccountId))];
 
-  // Delete all bindings for this strategy
   await db.delete(bindingsTable).where(eq(bindingsTable.strategyId, strategy.id));
 
-  // Delete the strategy record
   await db
     .delete(strategiesTable)
     .where(and(eq(strategiesTable.id, params.data.id), eq(strategiesTable.userId, req.userId!)));
 
-  // Remove the CopyFactory strategy (best-effort)
   const metaapiToken = await getMetaApiToken();
   if (metaapiToken && strategy.copyfactoryStrategyId) {
     fetch(
@@ -139,7 +174,6 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
     });
   }
 
-  // Re-sync CopyFactory for each affected slave (removes this strategy from their subscriptions)
   for (const slaveId of affectedSlaveIds) {
     const [slave] = await db.select({ id: slaveAccountsTable.id }).from(slaveAccountsTable).where(eq(slaveAccountsTable.id, slaveId));
     if (slave) {

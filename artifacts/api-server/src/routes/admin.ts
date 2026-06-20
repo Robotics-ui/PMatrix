@@ -7,7 +7,7 @@ import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { notifyAccountSuspended, notifyMasterAccountApproved } from "../lib/smsNotifier";
 import { invalidateMetaApiTokenCache } from "../lib/metaapi";
 import { getSchedulerStatus, runEnforcementTick, runExpiryWarningTick } from "../lib/scheduler";
-import { runPollerNow } from "../lib/accountPoller";
+import { runPollerNow, writeAuditLog } from "../lib/accountPoller";
 import { deployMasterToMetaApi, serializeAccount } from "./masterAccounts";
 import { serializeAccount as serializeSlaveAccount } from "./slaveAccounts";
 import { decryptCredential } from "../lib/auth";
@@ -261,6 +261,31 @@ router.post("/admin/master-accounts/:id/approve", authenticate, requireAdmin, as
     return;
   }
 
+  // Step 1: Mark as APPROVED
+  await db
+    .update(masterAccountsTable)
+    .set({ status: "approved", rejectionReason: null })
+    .where(eq(masterAccountsTable.id, account.id));
+
+  await writeAuditLog({
+    masterAccountId: account.id,
+    userId: account.userId,
+    adminId: req.userId!,
+    event: "approved",
+    fromStatus: "pending_approval",
+    toStatus: "approved",
+  });
+
+  // Step 2: Trigger MetaApi deployment
+  await writeAuditLog({
+    masterAccountId: account.id,
+    userId: account.userId,
+    adminId: req.userId!,
+    event: "deployment_started",
+    fromStatus: "approved",
+    toStatus: "deploying",
+  });
+
   const plainPassword = decryptCredential(account.investorPasswordEncrypted);
   const deployed = await deployMasterToMetaApi({
     mt5Login: account.mt5Login,
@@ -277,10 +302,19 @@ router.post("/admin/master-accounts/:id/approve", authenticate, requireAdmin, as
       deploymentStatus: deployed.deploymentStatus,
       lastErrorMessage: deployed.lastErrorMessage,
       metaapiRegion: deployed.metaapiRegion,
-      rejectionReason: null,
     })
     .where(eq(masterAccountsTable.id, account.id))
     .returning();
+
+  await writeAuditLog({
+    masterAccountId: account.id,
+    userId: account.userId,
+    adminId: req.userId!,
+    event: deployed.status === "deploying" ? "deployment_success" : "deployment_failed",
+    fromStatus: "approved",
+    toStatus: deployed.status,
+    reason: deployed.lastErrorMessage ?? undefined,
+  });
 
   // SMS: master account approved
   const [acctOwner] = await db.select().from(usersTable).where(eq(usersTable.id, account.userId)).limit(1);
@@ -317,6 +351,16 @@ router.post("/admin/master-accounts/:id/reject", authenticate, requireAdmin, asy
     .set({ status: "rejected", rejectionReason: reason })
     .where(eq(masterAccountsTable.id, account.id))
     .returning();
+
+  await writeAuditLog({
+    masterAccountId: account.id,
+    userId: account.userId,
+    adminId: req.userId!,
+    event: "rejected",
+    fromStatus: account.status,
+    toStatus: "rejected",
+    reason,
+  });
 
   res.json({ ...serializeAccount(updated), userEmail: null, userName: null });
 });
