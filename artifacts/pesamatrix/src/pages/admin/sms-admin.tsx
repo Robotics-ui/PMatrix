@@ -221,11 +221,11 @@ function SettingsTab() {
             <div className="space-y-2 md:col-span-2">
               <Label>MSpace API URL</Label>
               <Input
-                placeholder="https://api.mspace.co.ke/sms/v1/send"
-                value={merged.apiUrl ?? "https://api.mspace.co.ke/sms/v1/send"}
+                placeholder="https://api.mspace.co.ke/smsapi/v2/sendtext"
+                value={merged.apiUrl ?? "https://api.mspace.co.ke/smsapi/v2/sendtext"}
                 onChange={(e) => setForm((f) => ({ ...f, apiUrl: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">Default: https://api.mspace.co.ke/sms/v1/send</p>
+              <p className="text-xs text-muted-foreground">Default: https://api.mspace.co.ke/smsapi/v2/sendtext</p>
             </div>
 
             <div className="space-y-2">

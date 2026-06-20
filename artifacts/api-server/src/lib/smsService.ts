@@ -86,7 +86,7 @@ function resolveCreds(settings: typeof smsSettingsTable.$inferSelect) {
     apiKey: process.env.MSPACE_API_KEY?.trim() || settings.apiKey,
     username: process.env.MSPACE_USERNAME?.trim() || settings.username,
     senderId: process.env.MSPACE_SENDER_ID?.trim() || settings.senderId,
-    apiUrl: settings.apiUrl || "https://api.mspace.co.ke/sms/v1/send",
+    apiUrl: settings.apiUrl || "https://api.mspace.co.ke/smsapi/v2/sendtext",
   };
 }
 
@@ -151,7 +151,7 @@ export async function validateMSpaceCredentials(opts: {
   }
 
   try {
-    const res = await fetch(apiUrl || "https://api.mspace.co.ke/sms/v1/send", {
+    const res = await fetch(apiUrl || "https://api.mspace.co.ke/smsapi/v2/sendtext", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
