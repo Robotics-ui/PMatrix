@@ -1,0 +1,144 @@
+MASTER ACCOUNT LIFECYCLE ENFORCEMENT
+
+Implement a strict workflow for all master accounts:
+
+PENDING_APPROVAL
+→ APPROVED
+→ DEPLOYING
+→ DEPLOYED
+→ STRATEGY_CREATED
+→ ACTIVE
+→ ALLOW_SUBSCRIBERS
+
+Business Rule:
+
+Subscribers must NEVER be allowed to bind to a strategy unless the master account status is ACTIVE.
+
+Workflow:
+
+1. User submits a master account.
+   Status = PENDING_APPROVAL
+
+2. Admin approves.
+   Status = APPROVED
+
+3. System deploys account to MetaApi.
+   Status = DEPLOYING
+
+4. MetaApi confirms deployment success.
+   Status = DEPLOYED
+
+5. System creates CopyFactory strategy.
+   Status = STRATEGY_CREATED
+
+6. System verifies:
+   
+   - MetaApi connection = CONNECTED
+   - Deployment state = DEPLOYED
+   - Strategy exists in CopyFactory
+
+7. Status becomes ACTIVE.
+
+8. Only ACTIVE accounts:
+   
+   - Can create signals
+   - Can receive subscribers
+   - Appear in subscriber strategy lists
+   - Can execute copy trading
+
+Subscriber Protection:
+
+Before any subscriber bind request:
+
+Validate:
+
+master.status === 'ACTIVE'
+strategy.status === 'ACTIVE'
+metaapi.connectionStatus === 'CONNECTED'
+metaapi.deploymentState === 'DEPLOYED'
+
+If any check fails:
+
+Reject binding request with message:
+
+"This strategy is not yet active and cannot accept subscribers."
+
+UI Requirements:
+
+Master Account Status Badges:
+
+PENDING_APPROVAL - Gray
+APPROVED - Blue
+DEPLOYING - Yellow
+DEPLOYED - Cyan
+STRATEGY_CREATED - Purple
+ACTIVE - Green
+REJECTED - Red
+SUSPENDED - Orange
+
+Subscriber Dashboard:
+
+Only show strategies where:
+
+master.status = ACTIVE
+
+Hide all:
+
+- Pending
+- Approved
+- Deploying
+- Deployed
+- Rejected
+- Suspended
+
+Automatic Monitoring:
+
+Every 5 minutes:
+
+Check:
+
+- MetaApi deployment state
+- MetaApi connection state
+- CopyFactory strategy existence
+
+If connection lost:
+
+ACTIVE → SUSPENDED
+
+Disable new subscriber bindings immediately.
+
+When connection restored:
+
+SUSPENDED → ACTIVE
+
+Audit Trail:
+
+Record:
+
+- Submitted
+- Approved
+- Deployment Started
+- Deployment Success
+- Strategy Created
+- Activated
+- Suspended
+- Reactivated
+- Rejected
+
+Store:
+
+- User ID
+- Admin ID
+- Timestamp
+- Reason
+
+Final Rule:
+
+No subscriber account may bind to any strategy unless:
+
+Master Account Status = ACTIVE
+MetaApi Deployment = DEPLOYED
+MetaApi Connection = CONNECTED
+CopyFactory Strategy Exists = TRUE
+
+This rule cannot be bypassed by UI, API, or database operations.
