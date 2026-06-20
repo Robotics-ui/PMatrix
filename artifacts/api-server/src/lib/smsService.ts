@@ -108,13 +108,13 @@ export async function sendSmsNow(phone: string, message: string): Promise<{ succ
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        "api-key": apiKey,
+        apikey: apiKey,
       },
       body: JSON.stringify({
         username,
-        mobile: phone,
+        senderId,
+        recipient: phone,
         message,
-        from: senderId,
       }),
     });
 
@@ -156,13 +156,13 @@ export async function validateMSpaceCredentials(opts: {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        "api-key": apiKey,
+        apikey: apiKey,
       },
       body: JSON.stringify({
         username,
-        mobile: testPhone,
+        senderId,
+        recipient: testPhone,
         message: "PESAMATRIX: Credential validation test.",
-        from: senderId,
       }),
     });
 
