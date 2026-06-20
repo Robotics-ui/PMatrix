@@ -86,7 +86,7 @@ function resolveCreds(settings: typeof smsSettingsTable.$inferSelect) {
     apiKey: process.env.MSPACE_API_KEY?.trim() || settings.apiKey,
     username: process.env.MSPACE_USERNAME?.trim() || settings.username,
     senderId: process.env.MSPACE_SENDER_ID?.trim() || settings.senderId,
-    apiUrl: settings.apiUrl || "https://api.mspace.co.ke/smsapi/v2/sendtext",
+    apiUrl: process.env.MSPACE_API_URL?.trim() || settings.apiUrl || "https://api.mspace.co.ke/smsapi/v2/sendtext",
   };
 }
 

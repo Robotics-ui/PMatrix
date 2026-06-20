@@ -43,3 +43,4 @@ externalPort = 3000
 
 [userenv.shared]
 PORT = "5000"
+MSPACE_API_URL = "https://api.mspace.co.ke/smsapi/v2/sendtext"
