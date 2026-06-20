@@ -10,7 +10,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
-import { invalidateSmsSettingsCache, sendSmsNow, broadcastSms, seedDefaultTemplates } from "../lib/smsService";
+import { invalidateSmsSettingsCache, sendSmsNow, broadcastSms, seedDefaultTemplates, validateMSpaceCredentials } from "../lib/smsService";
 
 const router = Router();
 
@@ -77,33 +77,52 @@ router.put("/sms/preferences", authenticate, async (req, res): Promise<void> => 
 // ──────────────────────────────────────────────
 
 router.get("/admin/sms/settings", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  const envApiKey = process.env.MSPACE_API_KEY?.trim();
+  const envUsername = process.env.MSPACE_USERNAME?.trim();
+  const envSenderId = process.env.MSPACE_SENDER_ID?.trim();
+
   const [settings] = await db.select().from(smsSettingsTable).limit(1);
   if (!settings) {
     res.json({
       id: null,
-      providerName: "",
-      apiUrl: "",
-      apiKey: "",
-      apiSecret: "",
-      senderId: "PESAMTRX",
+      providerName: "MSpace",
+      apiUrl: "https://api.mspace.co.ke/sms/v1/send",
+      apiKey: envApiKey ? "••••••••" + envApiKey.slice(-4) : "",
+      username: envUsername ?? "",
+      senderId: envSenderId ?? "PESAMTRX",
       enabled: false,
+      envOverrides: {
+        apiKey: !!envApiKey,
+        username: !!envUsername,
+        senderId: !!envSenderId,
+      },
     });
     return;
   }
-  // Mask key and secret for display
+
   res.json({
     ...settings,
-    apiKey: settings.apiKey ? "••••••••" + settings.apiKey.slice(-4) : "",
-    apiSecret: settings.apiSecret ? "••••••••" + settings.apiSecret.slice(-4) : "",
+    apiKey: envApiKey
+      ? "••••••••" + envApiKey.slice(-4)
+      : settings.apiKey
+      ? "••••••••" + settings.apiKey.slice(-4)
+      : "",
+    username: envUsername ?? settings.username,
+    senderId: envSenderId ?? settings.senderId,
+    envOverrides: {
+      apiKey: !!envApiKey,
+      username: !!envUsername,
+      senderId: !!envSenderId,
+    },
   });
 });
 
 router.put("/admin/sms/settings", authenticate, requireAdmin, async (req, res): Promise<void> => {
-  const { providerName, apiUrl, apiKey, apiSecret, senderId, enabled } = req.body as {
+  const { providerName, apiUrl, apiKey, username, senderId, enabled } = req.body as {
     providerName?: string;
     apiUrl?: string;
     apiKey?: string;
-    apiSecret?: string;
+    username?: string;
     senderId?: string;
     enabled?: boolean;
   };
@@ -113,20 +132,19 @@ router.put("/admin/sms/settings", authenticate, requireAdmin, async (req, res): 
   const updates: Record<string, unknown> = {};
   if (providerName !== undefined) updates.providerName = providerName;
   if (apiUrl !== undefined) updates.apiUrl = apiUrl;
+  if (username !== undefined) updates.username = username;
   if (senderId !== undefined) updates.senderId = senderId;
   if (typeof enabled === "boolean") updates.enabled = enabled;
-  // Only overwrite key/secret if not masked placeholder
   if (apiKey && !apiKey.startsWith("••••")) updates.apiKey = apiKey;
-  if (apiSecret && !apiSecret.startsWith("••••")) updates.apiSecret = apiSecret;
 
   if (existing) {
     await db.update(smsSettingsTable).set(updates).where(eq(smsSettingsTable.id, existing.id));
   } else {
     await db.insert(smsSettingsTable).values({
-      providerName: (providerName as string) ?? "",
-      apiUrl: (apiUrl as string) ?? "",
+      providerName: (providerName as string) ?? "MSpace",
+      apiUrl: (apiUrl as string) ?? "https://api.mspace.co.ke/sms/v1/send",
       apiKey: (apiKey as string) ?? "",
-      apiSecret: (apiSecret as string) ?? "",
+      username: (username as string) ?? "",
       senderId: (senderId as string) ?? "PESAMTRX",
       enabled: (enabled as boolean) ?? false,
     });
@@ -136,13 +154,55 @@ router.put("/admin/sms/settings", authenticate, requireAdmin, async (req, res): 
   res.json({ success: true });
 });
 
+// ──────────────────────────────────────────────
+// ADMIN — Validate Credentials
+// ──────────────────────────────────────────────
+
+router.post("/admin/sms/validate", authenticate, requireAdmin, async (req, res): Promise<void> => {
+  const { apiUrl, apiKey, username, senderId, testPhone } = req.body as {
+    apiUrl?: string;
+    apiKey?: string;
+    username?: string;
+    senderId?: string;
+    testPhone?: string;
+  };
+
+  if (!testPhone || !testPhone.trim()) {
+    res.status(400).json({ error: "testPhone is required to validate credentials" });
+    return;
+  }
+
+  const [settings] = await db.select().from(smsSettingsTable).limit(1);
+
+  const resolvedApiKey = (apiKey && !apiKey.startsWith("••••"))
+    ? apiKey
+    : process.env.MSPACE_API_KEY?.trim() ?? settings?.apiKey ?? "";
+  const resolvedUsername = process.env.MSPACE_USERNAME?.trim() ?? username ?? settings?.username ?? "";
+  const resolvedSenderId = process.env.MSPACE_SENDER_ID?.trim() ?? senderId ?? settings?.senderId ?? "PESAMTRX";
+  const resolvedApiUrl = apiUrl ?? settings?.apiUrl ?? "https://api.mspace.co.ke/sms/v1/send";
+
+  const result = await validateMSpaceCredentials({
+    apiUrl: resolvedApiUrl,
+    apiKey: resolvedApiKey,
+    username: resolvedUsername,
+    senderId: resolvedSenderId,
+    testPhone: testPhone.trim(),
+  });
+
+  res.json(result);
+});
+
+// ──────────────────────────────────────────────
+// ADMIN — Test SMS
+// ──────────────────────────────────────────────
+
 router.post("/admin/sms/test", authenticate, requireAdmin, async (req, res): Promise<void> => {
   const { phone, message } = req.body as { phone: string; message?: string };
   if (!phone) {
     res.status(400).json({ error: "phone is required" });
     return;
   }
-  const testMessage = message ?? "PESAMATRIX: This is a test SMS. If you received this, your SMS provider is configured correctly.";
+  const testMessage = message ?? "PESAMATRIX: This is a test SMS. If you received this, your MSpace integration is configured correctly.";
   const result = await sendSmsNow(phone, testMessage);
   res.json(result);
 });

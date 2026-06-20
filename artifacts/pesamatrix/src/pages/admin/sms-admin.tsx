@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Send, Settings, FileText, List, BarChart3, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { MessageSquare, Send, Settings, FileText, List, RefreshCw, Eye, EyeOff, CheckCircle, XCircle, ShieldCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const token = () => localStorage.getItem("auth_token") ?? "";
@@ -36,9 +36,14 @@ type SmsSettings = {
   providerName: string;
   apiUrl: string;
   apiKey: string;
-  apiSecret: string;
+  username: string;
   senderId: string;
   enabled: boolean;
+  envOverrides?: {
+    apiKey: boolean;
+    username: boolean;
+    senderId: boolean;
+  };
 };
 
 type SmsTemplate = {
@@ -56,6 +61,7 @@ type SmsLog = {
   eventType: string;
   status: string;
   deliveryStatus: string | null;
+  providerResponse: string | null;
   sentAt: string | null;
   createdAt: string;
 };
@@ -72,6 +78,30 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   announcement: "Announcement",
   broadcast: "Broadcast",
 };
+
+function ApiResponseBox({ response, success }: { response: string; success: boolean }) {
+  let formatted = response;
+  try {
+    formatted = JSON.stringify(JSON.parse(response), null, 2);
+  } catch {
+    // not JSON
+  }
+  return (
+    <div className={`rounded-lg border p-3 ${success ? "border-green-600/30 bg-green-600/5" : "border-red-500/30 bg-red-500/5"}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {success
+          ? <CheckCircle className="h-4 w-4 text-green-400" />
+          : <XCircle className="h-4 w-4 text-red-400" />}
+        <span className={`text-xs font-semibold ${success ? "text-green-400" : "text-red-400"}`}>
+          {success ? "MSpace Response — Success" : "MSpace Response — Error"}
+        </span>
+      </div>
+      <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all font-mono leading-relaxed max-h-48 overflow-y-auto">
+        {formatted}
+      </pre>
+    </div>
+  );
+}
 
 function SettingsTab() {
   const { toast } = useToast();
@@ -93,29 +123,69 @@ function SettingsTab() {
       qc.invalidateQueries({ queryKey: ["admin-sms-settings"] });
       setForm({});
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
   const [testPhone, setTestPhone] = useState("");
   const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; response: string } | null>(null);
+
+  const [validatePhone, setValidatePhone] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [validateResult, setValidateResult] = useState<{ valid: boolean; response: string; statusCode?: number } | null>(null);
 
   async function sendTest() {
     if (!testPhone.trim()) return;
     setTesting(true);
+    setTestResult(null);
     try {
       const result = await apiFetch<{ success: boolean; response: string }>("/api/admin/sms/test", {
         method: "POST",
         body: JSON.stringify({ phone: testPhone }),
       });
+      setTestResult(result);
       toast({
         title: result.success ? "Test SMS sent" : "Test SMS failed",
-        description: result.response.slice(0, 150),
         variant: result.success ? "default" : "destructive",
       });
     } catch (e) {
-      toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
+      const msg = (e as Error).message;
+      setTestResult({ success: false, response: msg });
+      toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function validateCredentials() {
+    if (!validatePhone.trim()) {
+      toast({ title: "Enter a phone number for validation", variant: "destructive" });
+      return;
+    }
+    setValidating(true);
+    setValidateResult(null);
+    try {
+      const result = await apiFetch<{ valid: boolean; response: string; statusCode?: number }>("/api/admin/sms/validate", {
+        method: "POST",
+        body: JSON.stringify({
+          apiUrl: merged.apiUrl,
+          apiKey: form.apiKey,
+          username: merged.username,
+          senderId: merged.senderId,
+          testPhone: validatePhone.trim(),
+        }),
+      });
+      setValidateResult(result);
+      toast({
+        title: result.valid ? "Credentials valid" : "Credentials invalid",
+        variant: result.valid ? "default" : "destructive",
+      });
+    } catch (e) {
+      const msg = (e as Error).message;
+      setValidateResult({ valid: false, response: msg });
+      toast({ title: "Validation error", description: msg, variant: "destructive" });
+    } finally {
+      setValidating(false);
     }
   }
 
@@ -125,11 +195,18 @@ function SettingsTab() {
     <div className="space-y-6">
       <Card className="border-border bg-card">
         <CardHeader>
-          <CardTitle className="text-base">Provider Configuration</CardTitle>
-          <CardDescription>Configure your Bulk SMS provider credentials</CardDescription>
+          <CardTitle className="text-base">MSpace Configuration</CardTitle>
+          <CardDescription>
+            Configure your MSpace API credentials. The API Key is sent as a request header.
+            {settings?.envOverrides && (settings.envOverrides.apiKey || settings.envOverrides.username || settings.envOverrides.senderId) && (
+              <span className="block mt-1 text-blue-400 text-xs">
+                Some values are overridden by environment variables (MSPACE_API_KEY, MSPACE_USERNAME, MSPACE_SENDER_ID).
+              </span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-border">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
             <div>
               <p className="text-sm font-medium">Enable SMS Notifications</p>
               <p className="text-xs text-muted-foreground">Send SMS when credentials are configured</p>
@@ -141,51 +218,68 @@ function SettingsTab() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Provider Name</Label>
-              <Input
-                placeholder="e.g. AfricasTalking, BulkSMS Kenya"
-                value={merged.providerName ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, providerName: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Sender ID</Label>
-              <Input
-                placeholder="e.g. PESAMTRX"
-                value={merged.senderId ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
-              />
-            </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>API URL</Label>
+              <Label>MSpace API URL</Label>
               <Input
-                placeholder="https://api.yourprovider.com/sms/send"
-                value={merged.apiUrl ?? ""}
+                placeholder="https://api.mspace.co.ke/sms/v1/send"
+                value={merged.apiUrl ?? "https://api.mspace.co.ke/sms/v1/send"}
                 onChange={(e) => setForm((f) => ({ ...f, apiUrl: e.target.value }))}
               />
+              <p className="text-xs text-muted-foreground">Default: https://api.mspace.co.ke/sms/v1/send</p>
             </div>
+
             <div className="space-y-2">
-              <Label>API Key</Label>
+              <div className="flex items-center justify-between">
+                <Label>MSpace API Key</Label>
+                {settings?.envOverrides?.apiKey && (
+                  <Badge variant="outline" className="text-xs text-blue-400 border-blue-600/30">From env</Badge>
+                )}
+              </div>
               <Input
                 type="password"
-                placeholder={merged.apiKey?.startsWith("••••") ? merged.apiKey : "Enter API key"}
+                placeholder={merged.apiKey?.startsWith("••••") ? merged.apiKey : "Enter MSpace API Key"}
                 onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+                disabled={settings?.envOverrides?.apiKey}
+              />
+              <p className="text-xs text-muted-foreground">Sent as <code className="bg-muted px-1 rounded">api-key</code> request header</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>MSpace Username</Label>
+                {settings?.envOverrides?.username && (
+                  <Badge variant="outline" className="text-xs text-blue-400 border-blue-600/30">From env</Badge>
+                )}
+              </div>
+              <Input
+                placeholder="Your MSpace account username"
+                value={merged.username ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                disabled={settings?.envOverrides?.username}
               />
             </div>
+
             <div className="space-y-2">
-              <Label>API Secret</Label>
+              <div className="flex items-center justify-between">
+                <Label>Sender ID</Label>
+                {settings?.envOverrides?.senderId && (
+                  <Badge variant="outline" className="text-xs text-blue-400 border-blue-600/30">From env</Badge>
+                )}
+              </div>
               <Input
-                type="password"
-                placeholder={merged.apiSecret?.startsWith("••••") ? merged.apiSecret : "Enter API secret"}
-                onChange={(e) => setForm((f) => ({ ...f, apiSecret: e.target.value }))}
+                placeholder="e.g. PESAMTRX"
+                value={merged.senderId ?? "PESAMTRX"}
+                onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
+                disabled={settings?.envOverrides?.senderId}
               />
             </div>
           </div>
 
           <div className="pt-2 border-t border-border">
             <p className="text-xs text-muted-foreground mb-3">
-              The system sends a POST request to your API URL with JSON: {"{ to, message, from, api_key, api_secret }"}
+              Sends <code className="bg-muted px-1 rounded">POST</code> to the API URL with{" "}
+              <code className="bg-muted px-1 rounded">api-key</code> header and body:{" "}
+              <code className="bg-muted px-1 rounded">{"{ username, mobile, message, from }"}</code>
             </p>
             <Button
               onClick={() => saveMutation.mutate(form)}
@@ -198,12 +292,51 @@ function SettingsTab() {
         </CardContent>
       </Card>
 
+      {/* Validate Credentials */}
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-400" />
+            Validate Credentials
+          </CardTitle>
+          <CardDescription>Send a validation request to MSpace to confirm your credentials are correct before saving</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3">
+            <Input
+              placeholder="Phone number to validate (e.g. 254712345678)"
+              value={validatePhone}
+              onChange={(e) => setValidatePhone(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              onClick={validateCredentials}
+              disabled={validating || !validatePhone.trim()}
+              variant="outline"
+              className="border-blue-600/40 text-blue-400 hover:bg-blue-600/10"
+            >
+              {validating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              <span className="ml-2">{validating ? "Validating..." : "Validate"}</span>
+            </Button>
+          </div>
+          {validateResult && (
+            <div className="space-y-2">
+              {validateResult.statusCode && (
+                <p className="text-xs text-muted-foreground">HTTP Status: {validateResult.statusCode}</p>
+              )}
+              <ApiResponseBox response={validateResult.response} success={validateResult.valid} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Test SMS */}
       <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="text-base">Test SMS</CardTitle>
-          <CardDescription>Send a test message to verify your provider is working</CardDescription>
+          <CardDescription>Send a test message using the saved settings to verify delivery</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex gap-3">
             <Input
               placeholder="Phone number (e.g. 254712345678)"
@@ -211,11 +344,12 @@ function SettingsTab() {
               onChange={(e) => setTestPhone(e.target.value)}
               className="flex-1"
             />
-            <Button onClick={sendTest} disabled={testing || !testPhone.trim()}>
+            <Button onClick={sendTest} disabled={testing || !testPhone.trim()} className="bg-blue-600 hover:bg-blue-700">
               {testing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              <span className="ml-2">Send Test</span>
+              <span className="ml-2">{testing ? "Sending..." : "Send Test"}</span>
             </Button>
           </div>
+          {testResult && <ApiResponseBox response={testResult.response} success={testResult.success} />}
         </CardContent>
       </Card>
     </div>
@@ -341,11 +475,13 @@ function TemplatesTab() {
 
 function LogsTab() {
   const [page, setPage] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const limit = 25;
 
   const { data, isLoading, refetch } = useQuery<{ items: SmsLog[]; total: number }>({
-    queryKey: ["admin-sms-logs", page],
-    queryFn: () => apiFetch(`/api/admin/sms/logs?limit=${limit}&offset=${page * limit}`),
+    queryKey: ["admin-sms-logs", page, statusFilter],
+    queryFn: () => apiFetch(`/api/admin/sms/logs?limit=${limit}&offset=${page * limit}${statusFilter ? `&status=${statusFilter}` : ""}`),
   });
 
   const statusColor: Record<string, string> = {
@@ -356,8 +492,20 @@ function LogsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Total: {data?.total ?? 0} messages</p>
+      <div className="flex justify-between items-center gap-3">
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-muted-foreground">Total: {data?.total ?? 0} messages</p>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+            className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground"
+          >
+            <option value="">All statuses</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
         <Button variant="ghost" size="sm" onClick={() => refetch()}>
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
         </Button>
@@ -368,37 +516,44 @@ function LogsTab() {
       ) : (data?.items?.length ?? 0) === 0 ? (
         <div className="text-muted-foreground text-sm py-8 text-center">No SMS logs yet</div>
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Recipient</th>
-                <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Event</th>
-                <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Message</th>
-                <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Status</th>
-                <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.items.map((log) => (
-                <tr key={log.id} className="border-t border-border hover:bg-muted/20">
-                  <td className="px-3 py-2 font-mono text-xs">{log.phone}</td>
-                  <td className="px-3 py-2">
-                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{EVENT_TYPE_LABELS[log.eventType] ?? log.eventType}</span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-[240px] truncate">{log.message}</td>
-                  <td className="px-3 py-2">
-                    <span className={`text-xs font-medium ${statusColor[log.status] ?? "text-muted-foreground"}`}>
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {data?.items.map((log) => (
+            <div key={log.id} className="rounded-lg border border-border bg-card overflow-hidden">
+              <div
+                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/20"
+                onClick={() => setExpanded((e) => ({ ...e, [log.id]: !e[log.id] }))}
+              >
+                <span className={`text-xs font-semibold w-14 shrink-0 ${statusColor[log.status] ?? "text-muted-foreground"}`}>
+                  {log.status}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground w-32 shrink-0">{log.phone}</span>
+                <span className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0">
+                  {EVENT_TYPE_LABELS[log.eventType] ?? log.eventType}
+                </span>
+                <span className="text-xs text-muted-foreground truncate flex-1">{log.message}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                  {new Date(log.createdAt).toLocaleString()}
+                </span>
+              </div>
+              {expanded[log.id] && (
+                <div className="px-3 pb-3 pt-1 border-t border-border space-y-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Full message:</p>
+                    <p className="text-sm text-foreground bg-muted/30 rounded p-2">{log.message}</p>
+                  </div>
+                  {log.providerResponse && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">MSpace API response:</p>
+                      <ApiResponseBox response={log.providerResponse} success={log.status === "sent"} />
+                    </div>
+                  )}
+                  {log.sentAt && (
+                    <p className="text-xs text-muted-foreground">Delivered at: {new Date(log.sentAt).toLocaleString()}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -419,7 +574,7 @@ function BroadcastTab() {
   const [onlyActive, setOnlyActive] = useState(true);
   const [sending, setSending] = useState(false);
 
-  const { data: stats } = useQuery<SmsStats>({
+  const { data: stats, refetch: refetchStats } = useQuery<SmsStats>({
     queryKey: ["admin-sms-stats"],
     queryFn: () => apiFetch("/api/admin/sms/stats"),
     refetchInterval: 10000,
@@ -435,6 +590,7 @@ function BroadcastTab() {
       });
       toast({ title: "Broadcast queued", description: `${result.queued} messages added to the SMS queue` });
       setMessage("");
+      void refetchStats();
     } catch (e) {
       toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -442,11 +598,13 @@ function BroadcastTab() {
     }
   }
 
+  const smsCount = Math.ceil((message.length || 1) / 160);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Total Sent", value: stats?.total ?? 0, color: "text-foreground" },
+          { label: "Total Logged", value: stats?.total ?? 0, color: "text-foreground" },
           { label: "Delivered", value: stats?.sent ?? 0, color: "text-green-400" },
           { label: "Failed", value: stats?.failed ?? 0, color: "text-red-400" },
           { label: "In Queue", value: stats?.pending ?? 0, color: "text-yellow-400" },
@@ -462,8 +620,8 @@ function BroadcastTab() {
 
       <Card className="border-border bg-card">
         <CardHeader>
-          <CardTitle className="text-base">Send Broadcast SMS</CardTitle>
-          <CardDescription>Queue an SMS to be sent to all or active subscribers</CardDescription>
+          <CardTitle className="text-base">Admin Broadcast SMS</CardTitle>
+          <CardDescription>Send an SMS to all users or only those with an active subscription</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -474,13 +632,16 @@ function BroadcastTab() {
               onChange={(e) => setMessage(e.target.value)}
               className="min-h-[100px] resize-none"
             />
-            <p className="text-xs text-muted-foreground text-right">{message.length} / 160 chars (1 SMS)</p>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{message.length} characters</span>
+              <span>{smsCount} SMS segment{smsCount !== 1 ? "s" : ""} · {160 - (message.length % 160 || 160)} chars remaining in segment</span>
+            </div>
           </div>
 
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
             <div>
               <p className="text-sm font-medium">Active subscribers only</p>
-              <p className="text-xs text-muted-foreground">Send only to users with an active subscription</p>
+              <p className="text-xs text-muted-foreground">Only users with an active subscription will receive this broadcast</p>
             </div>
             <Switch checked={onlyActive} onCheckedChange={setOnlyActive} />
           </div>
@@ -498,7 +659,7 @@ function BroadcastTab() {
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            Messages are queued and processed in the background by the SMS worker every minute.
+            Messages are queued and processed by the SMS worker every minute via MSpace.
           </p>
         </CardContent>
       </Card>
@@ -518,8 +679,8 @@ export default function AdminSmsPage() {
             <MessageSquare className="h-5 w-5 text-green-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Bulk SMS</h1>
-            <p className="text-sm text-muted-foreground">Manage provider settings, templates, logs, and broadcasts</p>
+            <h1 className="text-xl font-bold text-foreground">SMS — MSpace</h1>
+            <p className="text-sm text-muted-foreground">Manage MSpace credentials, templates, delivery logs, and broadcasts</p>
           </div>
         </div>
 

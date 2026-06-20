@@ -81,33 +81,107 @@ export async function enqueueEventSms(opts: {
   await enqueueSms({ userId, phone, message, eventType });
 }
 
+function resolveCreds(settings: typeof smsSettingsTable.$inferSelect) {
+  return {
+    apiKey: process.env.MSPACE_API_KEY?.trim() || settings.apiKey,
+    username: process.env.MSPACE_USERNAME?.trim() || settings.username,
+    senderId: process.env.MSPACE_SENDER_ID?.trim() || settings.senderId,
+    apiUrl: settings.apiUrl || "https://api.mspace.co.ke/sms/v1/send",
+  };
+}
+
 export async function sendSmsNow(phone: string, message: string): Promise<{ success: boolean; response: string }> {
   const settings = await getSettings();
   if (!settings || !settings.enabled) {
     return { success: false, response: "SMS not enabled" };
   }
 
+  const { apiKey, username, senderId, apiUrl } = resolveCreds(settings);
+
+  if (!apiKey || !username) {
+    return { success: false, response: "MSpace API Key and Username are required" };
+  }
+
   try {
-    const res = await fetch(settings.apiUrl, {
+    const res = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        "api-key": apiKey,
       },
       body: JSON.stringify({
-        api_key: settings.apiKey,
-        api_secret: settings.apiSecret,
-        sender_id: settings.senderId,
-        to: phone,
+        username,
+        mobile: phone,
         message,
+        from: senderId,
       }),
     });
 
     const text = await res.text();
-    return { success: res.ok, response: text.slice(0, 500) };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+
+    const responseStr = typeof parsed === "object" && parsed !== null
+      ? JSON.stringify(parsed)
+      : text.slice(0, 500);
+
+    return { success: res.ok, response: responseStr };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, response: msg };
+  }
+}
+
+export async function validateMSpaceCredentials(opts: {
+  apiUrl: string;
+  apiKey: string;
+  username: string;
+  senderId: string;
+  testPhone: string;
+}): Promise<{ valid: boolean; response: string; statusCode?: number }> {
+  const { apiUrl, apiKey, username, senderId, testPhone } = opts;
+
+  if (!apiKey || !username || !senderId) {
+    return { valid: false, response: "API Key, Username and Sender ID are required" };
+  }
+
+  try {
+    const res = await fetch(apiUrl || "https://api.mspace.co.ke/sms/v1/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "api-key": apiKey,
+      },
+      body: JSON.stringify({
+        username,
+        mobile: testPhone,
+        message: "PESAMATRIX: Credential validation test.",
+        from: senderId,
+      }),
+    });
+
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+
+    const responseStr = typeof parsed === "object" && parsed !== null
+      ? JSON.stringify(parsed)
+      : text.slice(0, 500);
+
+    return { valid: res.ok, response: responseStr, statusCode: res.status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { valid: false, response: msg };
   }
 }
 
@@ -132,7 +206,6 @@ export async function processSmsQueue(batchSize = 50, concurrency = 10): Promise
 
   if (toProcess.length === 0) return;
 
-  // Process in chunks of `concurrency`
   for (let i = 0; i < toProcess.length; i += concurrency) {
     const chunk = toProcess.slice(i, i + concurrency);
     await Promise.all(
