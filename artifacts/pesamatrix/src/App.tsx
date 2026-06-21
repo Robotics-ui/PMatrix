@@ -31,6 +31,7 @@ import LandingPage from "@/pages/landing";
 import DiagnosticsPage from "@/pages/diagnostics";
 import AdminSmsPage from "@/pages/admin/sms-admin";
 import NotificationPreferencesPage from "@/pages/notification-preferences";
+import ReferralsPage from "@/pages/referrals";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/admin/diagnostics" component={DiagnosticsPage} />
       <Route path="/admin/sms" component={AdminSmsPage} />
       <Route path="/settings/notifications" component={NotificationPreferencesPage} />
+      <Route path="/referrals" component={ReferralsPage} />
       <Route path="/change-password" component={ChangePasswordPage} />
       <Route path="/market" component={MarketPulsePage} />
       <Route path="/forgot-password" component={() => <GuestRoute component={ForgotPasswordPage} />} />

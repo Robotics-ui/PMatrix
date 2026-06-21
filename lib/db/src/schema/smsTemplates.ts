@@ -11,6 +11,9 @@ export const SMS_EVENT_TYPES = [
   "account_suspended",
   "announcement",
   "broadcast",
+  "free_trial_activated",
+  "free_trial_expired",
+  "referral_reward",
 ] as const;
 
 export type SmsEventType = (typeof SMS_EVENT_TYPES)[number];

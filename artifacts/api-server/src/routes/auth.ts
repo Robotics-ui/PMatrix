@@ -1,10 +1,20 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
-import { db, usersTable, subscriptionsTable, passwordResetTokensTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  subscriptionsTable,
+  passwordResetTokensTable,
+  promoCodesTable,
+  referralsTable,
+} from "@workspace/db";
 import { RegisterBody, LoginBody, ForgotPasswordBody } from "@workspace/api-zod";
 import { hashPassword, verifyPassword, signToken } from "../lib/auth";
 import { authenticate } from "../middlewares/authenticate";
+import { generateUniquePromoCode } from "../lib/promoCode";
+import { createNotification } from "../lib/notificationService";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -16,22 +26,164 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   const { name, email, phone, password } = parsed.data;
+  const referralCode = typeof req.body.referralCode === "string"
+    ? req.body.referralCode.trim().toUpperCase()
+    : null;
 
+  // Email uniqueness (enforced by DB unique constraint, but give a clear error)
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existing.length > 0) {
     res.status(400).json({ error: "Email already registered" });
     return;
   }
 
-  const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(usersTable).values({ name, email, phone, passwordHash }).returning();
+  // Phone abuse prevention: detect if same phone was already used for a free trial
+  const usersWithPhone = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.phone, phone));
 
-  await db.insert(subscriptionsTable).values({ userId: user.id, status: "expired", daysPaid: 0 });
+  let phoneHadTrial = false;
+  for (const u of usersWithPhone) {
+    const [existingSub] = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(
+        eq(subscriptionsTable.userId, u.id),
+      )
+      .limit(1);
+    if (existingSub && existingSub.freeTrialUsed === 1) {
+      phoneHadTrial = true;
+      break;
+    }
+  }
+
+  const passwordHash = await hashPassword(password);
+  const [user] = await db
+    .insert(usersTable)
+    .values({ name, email, phone, passwordHash })
+    .returning();
+
+  // ── Generate unique referral promo code for new user ──────────────────────
+  let myPromoCode: string | null = null;
+  try {
+    myPromoCode = await generateUniquePromoCode(user.id);
+  } catch (err) {
+    logger.error({ err, userId: user.id }, "Failed to generate promo code");
+  }
+
+  // ── Grant free trial or expired subscription ──────────────────────────────
+  const now = new Date();
+  if (phoneHadTrial) {
+    // Phone was already used for a free trial — no second trial
+    await db.insert(subscriptionsTable).values({
+      userId: user.id,
+      status: "expired",
+      daysPaid: 0,
+      freeTrialUsed: 0,
+    });
+    logger.info(
+      { userId: user.id, phone },
+      "Registration: phone already used for free trial — starting with expired subscription",
+    );
+  } else {
+    // Grant 2-day free trial
+    const trialEnd = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+    await db.insert(subscriptionsTable).values({
+      userId: user.id,
+      status: "free_trial",
+      startDate: now,
+      endDate: trialEnd,
+      daysPaid: 0,
+      freeTrialUsed: 1,
+    });
+
+    await createNotification({
+      userId: user.id,
+      type: "free_trial_activated",
+      title: "Welcome — Free Trial Active",
+      message:
+        "Your 2-day free trial is now active. Add a slave account and bind it to a strategy to start receiving copy trades.",
+    });
+
+    logger.info(
+      { userId: user.id, trialEnd },
+      "Registration: 2-day free trial granted",
+    );
+  }
+
+  // ── Process inbound referral code ─────────────────────────────────────────
+  if (referralCode) {
+    try {
+      const [promoCodeRecord] = await db
+        .select()
+        .from(promoCodesTable)
+        .where(eq(promoCodesTable.code, referralCode))
+        .limit(1);
+
+      if (!promoCodeRecord) {
+        logger.info(
+          { userId: user.id, referralCode },
+          "Referral code not found — skipping",
+        );
+      } else if (promoCodeRecord.userId === user.id) {
+        logger.warn(
+          { userId: user.id, referralCode },
+          "Self-referral attempt — rejected",
+        );
+      } else {
+        // Check referrer is not the same person (email or phone match)
+        const [referrer] = await db
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.id, promoCodeRecord.userId))
+          .limit(1);
+
+        const isSelfReferral =
+          referrer && (referrer.email === email || referrer.phone === phone);
+
+        if (isSelfReferral) {
+          logger.warn(
+            { userId: user.id, referrerId: promoCodeRecord.userId },
+            "Self-referral via matching email/phone — rejected",
+          );
+        } else {
+          // Check for duplicate referral (same referredUserId)
+          const [existingReferral] = await db
+            .select()
+            .from(referralsTable)
+            .where(eq(referralsTable.referredUserId, user.id))
+            .limit(1);
+
+          if (!existingReferral) {
+            await db.insert(referralsTable).values({
+              referrerId: promoCodeRecord.userId,
+              referredUserId: user.id,
+              referredPhone: phone,
+              referredEmail: email,
+              status: "pending",
+            });
+            logger.info(
+              {
+                referrerId: promoCodeRecord.userId,
+                referredUserId: user.id,
+                referralCode,
+              },
+              "Referral recorded",
+            );
+          }
+        }
+      }
+    } catch (err) {
+      logger.error({ err, userId: user.id, referralCode }, "Failed to process referral code");
+    }
+  }
 
   const token = signToken(user.id, user.role);
   res.status(201).json({
     token,
     mustChangePassword: user.mustChangePassword,
+    promoCode: myPromoCode,
     user: {
       id: user.id,
       name: user.name,
@@ -145,14 +297,23 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await db.update(usersTable).set({ passwordHash, mustChangePassword: false }).where(eq(usersTable.id, resetToken.userId));
-  await db.update(passwordResetTokensTable).set({ used: true }).where(eq(passwordResetTokensTable.id, resetToken.id));
+  await db
+    .update(usersTable)
+    .set({ passwordHash, mustChangePassword: false })
+    .where(eq(usersTable.id, resetToken.userId));
+  await db
+    .update(passwordResetTokensTable)
+    .set({ used: true })
+    .where(eq(passwordResetTokensTable.id, resetToken.id));
 
   res.json({ message: "Password reset successfully. You can now log in with your new password." });
 });
 
 router.patch("/auth/change-password", authenticate, async (req, res): Promise<void> => {
-  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
 
   if (!currentPassword || typeof currentPassword !== "string") {
     res.status(400).json({ error: "Current password is required" });
@@ -177,7 +338,9 @@ router.patch("/auth/change-password", authenticate, async (req, res): Promise<vo
   }
 
   if (currentPassword === newPassword) {
-    res.status(400).json({ error: "New password must be different from the current password" });
+    res.status(400).json({
+      error: "New password must be different from the current password",
+    });
     return;
   }
 

@@ -9,7 +9,7 @@ import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
 import { startAccountPoller } from "./lib/accountPoller";
 import { startReconnectWorker } from "./lib/reconnectWorker";
-import { seedDefaultAccounts } from "./lib/seed";
+import { seedDefaultAccounts, seedReferralSettings } from "./lib/seed";
 import { startSmsWorker } from "./lib/smsWorker";
 import { seedDefaultTemplates } from "./lib/smsService";
 
@@ -132,5 +132,7 @@ startReconnectWorker();
 startSmsWorker();
 // Seed default SMS templates
 void seedDefaultTemplates();
+// Seed default referral reward milestones
+void seedReferralSettings();
 
 export default app;

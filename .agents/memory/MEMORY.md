@@ -5,3 +5,6 @@
 - [MetaApi state mapping](metaapi-state-mapping.md) — mapMetaApiState: DEPLOYING→deploying, DEPLOYED→deployed, CONNECTED→connected, FAILED/ERROR→failed. Never use mapMetaApiState for lifecycle-managed statuses (deployed/strategy_created/active/suspended) — the poller owns those transitions.
 - [Master lifecycle enforcement](master-lifecycle.md) — strict 8-stage pipeline with audit trail, 5-min health monitor, and hard binding guard; writeAuditLog exported from accountPoller.ts; refresh-status route must not regress lifecycle-managed statuses.
 - [Auth middleware shape](auth-middleware.md) — authenticate sets req.userId (number) and req.userRole (string); never use req.user — it does not exist. Admin pages use requireAdmin after authenticate.
+- [SMS event type registry](sms-event-types.md) — new SMS event types must be added to SMS_EVENT_TYPES array in lib/db/src/schema/smsTemplates.ts or they fail TypeScript compilation with smsNotifier.ts.
+- [Express 5 params type](express5-params.md) — req.params[key] is typed string | string[] in Express 5; always wrap with String() before parseInt to avoid TS2345.
+- [Custom API calls in frontend](frontend-api-calls.md) — @workspace/api-client-react does NOT export axiosInstance; use native fetch with token from useAuth() for endpoints not covered by generated hooks.

@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db, slaveAccountsTable, subscriptionsTable } from "@workspace/db";
 import { CreateSlaveAccountBody, DeleteSlaveAccountParams, RefreshSlaveAccountStatusParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
+import { requireActiveSubscription } from "../middlewares/requireActiveSubscription";
 import { encryptCredential } from "../lib/auth";
 import { getMetaApiToken, callMetaApi, mapMetaApiState } from "../lib/metaapi";
 import { logger } from "../lib/logger";
@@ -41,7 +42,7 @@ export function serializeAccount(a: typeof slaveAccountsTable.$inferSelect) {
   };
 }
 
-router.get("/slave-accounts", authenticate, async (req, res): Promise<void> => {
+router.get("/slave-accounts", authenticate, requireActiveSubscription, async (req, res): Promise<void> => {
   const accounts = await db
     .select()
     .from(slaveAccountsTable)

@@ -11,6 +11,7 @@ import {
   BarChart3,
   Shield,
   LogOut,
+  Gift,
   TrendingUp,
   ChevronRight,
   Newspaper,
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/about", label: "About Us", icon: Info },
   { href: "/contacts", label: "Contacts", icon: Phone },
   { href: "/settings/notifications", label: "SMS Preferences", icon: Bell },
+  { href: "/referrals", label: "Referrals", icon: Gift },
 ];
 
 const adminNavItems = [

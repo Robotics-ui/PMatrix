@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db, usersTable, subscriptionsTable, adminSettingsTable } from "@workspace/db";
+import { db, usersTable, subscriptionsTable, adminSettingsTable, referralSettingsTable } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
@@ -37,8 +37,33 @@ export async function seedDefaultAccounts(): Promise<void> {
     endDate.setDate(endDate.getDate() + 7);
     await db.insert(subscriptionsTable).values({ userId: trader.id, status: "active", startDate: new Date(), endDate, daysPaid: 5 });
 
+    // Seed demo trader promo code
+    const { db: _db2, promoCodesTable } = await import("@workspace/db");
+    await _db2
+      .insert(promoCodesTable)
+      .values({ userId: trader.id, code: "DEMO1234", totalReferrals: 0, totalRewardDays: 0 })
+      .onConflictDoNothing();
+
     logger.info("Default accounts seeded (admin + demo trader)");
   } catch (err) {
     logger.error({ err }, "Failed to seed default accounts");
+  }
+}
+
+export async function seedReferralSettings(): Promise<void> {
+  try {
+    const existing = await db.select().from(referralSettingsTable).limit(1);
+    if (existing.length > 0) return;
+
+    // Default reward milestones
+    await db.insert(referralSettingsTable).values([
+      { referralsRequired: 1, rewardDays: 1, isEnabled: true },
+      { referralsRequired: 5, rewardDays: 7, isEnabled: true },
+      { referralsRequired: 10, rewardDays: 30, isEnabled: true },
+    ]);
+
+    logger.info("Default referral settings seeded (1→1d, 5→7d, 10→30d)");
+  } catch (err) {
+    logger.error({ err }, "Failed to seed referral settings");
   }
 }

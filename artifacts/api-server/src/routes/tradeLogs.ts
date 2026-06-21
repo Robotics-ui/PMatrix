@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq, desc, inArray } from "drizzle-orm";
 import { db, tradeLogsTable, strategiesTable } from "@workspace/db";
 import { authenticate } from "../middlewares/authenticate";
+import { requireActiveSubscription } from "../middlewares/requireActiveSubscription";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ function parseNum(v: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
-router.get("/trade-logs", authenticate, async (req, res): Promise<void> => {
+router.get("/trade-logs", authenticate, requireActiveSubscription, async (req, res): Promise<void> => {
   const userStrategies = await db
     .select()
     .from(strategiesTable)

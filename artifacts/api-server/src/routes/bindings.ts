@@ -3,11 +3,12 @@ import { eq, and, inArray } from "drizzle-orm";
 import { db, bindingsTable, subscriptionsTable, slaveAccountsTable, strategiesTable, masterAccountsTable } from "@workspace/db";
 import { CreateBindingBody, DeleteBindingParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
+import { requireActiveSubscription } from "../middlewares/requireActiveSubscription";
 import { syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
 
 const router = Router();
 
-router.get("/bindings", authenticate, async (req, res): Promise<void> => {
+router.get("/bindings", authenticate, requireActiveSubscription, async (req, res): Promise<void> => {
   const userStrategies = await db
     .select()
     .from(strategiesTable)
@@ -48,8 +49,8 @@ router.post("/bindings", authenticate, async (req, res): Promise<void> => {
     .from(subscriptionsTable)
     .where(eq(subscriptionsTable.userId, req.userId!));
 
-  if (!sub || sub.status !== "active") {
-    res.status(400).json({ error: "Active subscription required to bind accounts" });
+  if (!sub || (sub.status !== "active" && sub.status !== "free_trial")) {
+    res.status(400).json({ error: "Active subscription or free trial required to bind accounts" });
     return;
   }
 

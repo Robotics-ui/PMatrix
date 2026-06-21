@@ -76,3 +76,53 @@ export function notifyAccountSuspended(opts: { userId: number; phone: string; na
     }),
   );
 }
+
+export function notifyFreeTrialActivated(opts: {
+  userId: number;
+  phone: string;
+  name: string;
+  endDate: string;
+}) {
+  fire(() =>
+    enqueueEventSms({
+      userId: opts.userId,
+      phone: opts.phone,
+      eventType: "free_trial_activated",
+      vars: { name: opts.name, endDate: opts.endDate },
+      preferenceKey: "subscriptionAlerts",
+    }),
+  );
+}
+
+export function notifyFreeTrialExpired(opts: {
+  userId: number;
+  phone: string;
+  name: string;
+}) {
+  fire(() =>
+    enqueueEventSms({
+      userId: opts.userId,
+      phone: opts.phone,
+      eventType: "free_trial_expired",
+      vars: { name: opts.name },
+      preferenceKey: "subscriptionAlerts",
+    }),
+  );
+}
+
+export function notifyReferralReward(opts: {
+  userId: number;
+  phone: string;
+  name: string;
+  rewardDays: string;
+}) {
+  fire(() =>
+    enqueueEventSms({
+      userId: opts.userId,
+      phone: opts.phone,
+      eventType: "referral_reward",
+      vars: { name: opts.name, rewardDays: opts.rewardDays },
+      preferenceKey: "subscriptionAlerts",
+    }),
+  );
+}

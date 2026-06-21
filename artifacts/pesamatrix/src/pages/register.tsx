@@ -11,7 +11,13 @@ import { AlertCircle, TrendingUp } from "lucide-react";
 export default function RegisterPage() {
   const [, navigate] = useLocation();
   const { login } = useAuth();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    referralCode: "",
+  });
   const [error, setError] = useState("");
 
   const { mutate, isPending } = useRegister({
@@ -30,7 +36,13 @@ export default function RegisterPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    mutate({ data: form });
+    const { referralCode, ...baseForm } = form;
+    mutate({
+      data: {
+        ...baseForm,
+        ...(referralCode.trim() ? { referralCode: referralCode.trim().toUpperCase() } : {}),
+      } as Parameters<typeof mutate>[0]["data"],
+    });
   };
 
   return (
@@ -47,7 +59,9 @@ export default function RegisterPage() {
         <Card className="border-border bg-card">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Create account</CardTitle>
-            <CardDescription className="text-center">Start your copy trading journey today</CardDescription>
+            <CardDescription className="text-center">
+              Start your 2-day free trial today
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -59,21 +73,65 @@ export default function RegisterPage() {
               )}
               <div className="space-y-2">
                 <Label htmlFor="name">Full name</Label>
-                <Input id="name" placeholder="John Doe" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                <Input
+                  id="name"
+                  placeholder="John Doe"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="you@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone (M-Pesa)</Label>
-                <Input id="phone" placeholder="254712345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
+                <Input
+                  id="phone"
+                  placeholder="254712345678"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" placeholder="••••••••" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
               </div>
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isPending}>
+              <div className="space-y-2">
+                <Label htmlFor="referralCode">
+                  Referral code{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="referralCode"
+                  placeholder="e.g. PESA1234"
+                  value={form.referralCode}
+                  onChange={(e) =>
+                    setForm({ ...form, referralCode: e.target.value.toUpperCase() })
+                  }
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                disabled={isPending}
+              >
                 {isPending ? "Creating account..." : "Create account"}
               </Button>
             </form>
