@@ -394,7 +394,7 @@ export default function MasterAccountsPage() {
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={creating || !form.mt5Login || !form.broker || !form.investorPassword}
+                disabled={creating || !form.mt5Login || !form.broker || !form.investorPassword || !form.server}
                 onClick={() => create({ data: { platform: form.platform as "mt4" | "mt5", mt5Login: form.mt5Login, investorPassword: form.investorPassword, server: form.server, broker: form.broker } })}
               >
                 {creating ? "Submitting..." : "Submit for Approval"}
