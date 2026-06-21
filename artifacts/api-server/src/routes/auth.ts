@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import crypto from "crypto";
 import {
   db,
@@ -8,6 +8,7 @@ import {
   passwordResetTokensTable,
   promoCodesTable,
   referralsTable,
+  smsQueueTable,
 } from "@workspace/db";
 import { RegisterBody, LoginBody, ForgotPasswordBody } from "@workspace/api-zod";
 import { hashPassword, verifyPassword, signToken } from "../lib/auth";
@@ -17,6 +18,25 @@ import { createNotification } from "../lib/notificationService";
 import { logger } from "../lib/logger";
 
 const router = Router();
+
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function queueOtpSms(userId: number, phone: string, otp: string): Promise<void> {
+  const message = `Your PESAMATRIX verification code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
+  try {
+    await db.insert(smsQueueTable).values({
+      userId,
+      phone,
+      message,
+      eventType: "otp_verification",
+      status: "pending",
+    });
+  } catch (err) {
+    logger.error({ err, userId }, "Failed to queue OTP SMS");
+  }
+}
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
@@ -29,42 +49,33 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const referralCode = typeof req.body.referralCode === "string"
     ? req.body.referralCode.trim().toUpperCase()
     : null;
+  const deviceFingerprint = typeof req.body.deviceFingerprint === "string"
+    ? req.body.deviceFingerprint.trim()
+    : null;
 
-  // Email uniqueness (enforced by DB unique constraint, but give a clear error)
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existing.length > 0) {
     res.status(400).json({ error: "Email already registered" });
     return;
   }
 
-  // Phone abuse prevention: detect if same phone was already used for a free trial
+  // Check if phone is already registered (uniqueness)
   const usersWithPhone = await db
     .select({ id: usersTable.id })
     .from(usersTable)
     .where(eq(usersTable.phone, phone));
 
-  let phoneHadTrial = false;
-  for (const u of usersWithPhone) {
-    const [existingSub] = await db
-      .select()
-      .from(subscriptionsTable)
-      .where(
-        eq(subscriptionsTable.userId, u.id),
-      )
-      .limit(1);
-    if (existingSub && existingSub.freeTrialUsed === 1) {
-      phoneHadTrial = true;
-      break;
-    }
+  if (usersWithPhone.length > 0) {
+    res.status(400).json({ error: "Phone number already registered" });
+    return;
   }
 
   const passwordHash = await hashPassword(password);
   const [user] = await db
     .insert(usersTable)
-    .values({ name, email, phone, passwordHash })
+    .values({ name, email, phone, passwordHash, deviceFingerprint: deviceFingerprint ?? null })
     .returning();
 
-  // ── Generate unique referral promo code for new user ──────────────────────
   let myPromoCode: string | null = null;
   try {
     myPromoCode = await generateUniquePromoCode(user.id);
@@ -72,47 +83,26 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     logger.error({ err, userId: user.id }, "Failed to generate promo code");
   }
 
-  // ── Grant free trial or expired subscription ──────────────────────────────
-  const now = new Date();
-  if (phoneHadTrial) {
-    // Phone was already used for a free trial — no second trial
-    await db.insert(subscriptionsTable).values({
-      userId: user.id,
-      status: "expired",
-      daysPaid: 0,
-      freeTrialUsed: 0,
-    });
-    logger.info(
-      { userId: user.id, phone },
-      "Registration: phone already used for free trial — starting with expired subscription",
-    );
-  } else {
-    // Grant 2-day free trial
-    const trialEnd = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-    await db.insert(subscriptionsTable).values({
-      userId: user.id,
-      status: "free_trial",
-      startDate: now,
-      endDate: trialEnd,
-      daysPaid: 0,
-      freeTrialUsed: 1,
-    });
+  // Create expired subscription — trial only activates after OTP verification
+  await db.insert(subscriptionsTable).values({
+    userId: user.id,
+    status: "expired",
+    daysPaid: 0,
+    freeTrialUsed: 0,
+  });
 
-    await createNotification({
-      userId: user.id,
-      type: "free_trial_activated",
-      title: "Welcome — Free Trial Active",
-      message:
-        "Your 2-day free trial is now active. Add a slave account and bind it to a strategy to start receiving copy trades.",
-    });
+  // Generate and send OTP
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  await db
+    .update(usersTable)
+    .set({ otpCode: otp, otpExpiresAt })
+    .where(eq(usersTable.id, user.id));
+  await queueOtpSms(user.id, phone, otp);
 
-    logger.info(
-      { userId: user.id, trialEnd },
-      "Registration: 2-day free trial granted",
-    );
-  }
+  logger.info({ userId: user.id }, "Registration: OTP sent, awaiting phone verification");
 
-  // ── Process inbound referral code ─────────────────────────────────────────
+  // Process inbound referral code
   if (referralCode) {
     try {
       const [promoCodeRecord] = await db
@@ -122,17 +112,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
         .limit(1);
 
       if (!promoCodeRecord) {
-        logger.info(
-          { userId: user.id, referralCode },
-          "Referral code not found — skipping",
-        );
+        logger.info({ userId: user.id, referralCode }, "Referral code not found — skipping");
       } else if (promoCodeRecord.userId === user.id) {
-        logger.warn(
-          { userId: user.id, referralCode },
-          "Self-referral attempt — rejected",
-        );
+        logger.warn({ userId: user.id, referralCode }, "Self-referral attempt — rejected");
       } else {
-        // Check referrer is not the same person (email or phone match)
         const [referrer] = await db
           .select()
           .from(usersTable)
@@ -148,7 +131,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
             "Self-referral via matching email/phone — rejected",
           );
         } else {
-          // Check for duplicate referral (same referredUserId)
           const [existingReferral] = await db
             .select()
             .from(referralsTable)
@@ -164,11 +146,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
               status: "pending",
             });
             logger.info(
-              {
-                referrerId: promoCodeRecord.userId,
-                referredUserId: user.id,
-                referralCode,
-              },
+              { referrerId: promoCodeRecord.userId, referredUserId: user.id, referralCode },
               "Referral recorded",
             );
           }
@@ -180,9 +158,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   const token = signToken(user.id, user.role);
-  res.status(201).json({
+  const response: Record<string, unknown> = {
     token,
     mustChangePassword: user.mustChangePassword,
+    requiresOtp: true,
     promoCode: myPromoCode,
     user: {
       id: user.id,
@@ -193,9 +172,183 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       status: user.status,
       createdAt: user.createdAt,
     },
+  };
+  if (process.env.NODE_ENV !== "production") {
+    response._devOtp = otp;
+  }
+  res.status(201).json(response);
+});
+
+// ── OTP Verification ──────────────────────────────────────────────────────────
+router.post("/auth/verify-otp", authenticate, async (req, res): Promise<void> => {
+  const { code } = req.body as { code?: string };
+  if (!code || typeof code !== "string") {
+    res.status(400).json({ error: "Verification code is required" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (user.phoneVerifiedAt) {
+    // Already verified — check subscription state
+    const [sub] = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(eq(subscriptionsTable.userId, user.id))
+      .limit(1);
+    res.json({
+      message: "Phone already verified",
+      trialActivated: sub?.status === "free_trial" || sub?.status === "active",
+    });
+    return;
+  }
+
+  if (!user.otpCode || !user.otpExpiresAt) {
+    res.status(400).json({ error: "No verification code found. Please request a new one." });
+    return;
+  }
+
+  if (new Date() > user.otpExpiresAt) {
+    res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+    return;
+  }
+
+  if (user.otpCode !== code.trim()) {
+    res.status(400).json({ error: "Invalid verification code" });
+    return;
+  }
+
+  // Mark phone as verified and clear OTP
+  await db
+    .update(usersTable)
+    .set({ phoneVerifiedAt: new Date(), otpCode: null, otpExpiresAt: null })
+    .where(eq(usersTable.id, user.id));
+
+  // Check trial eligibility
+  // 1. Same phone on another account that already used a trial
+  const otherUsersWithPhone = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.phone, user.phone), ne(usersTable.id, user.id)));
+
+  let phoneHadTrial = false;
+  for (const u of otherUsersWithPhone) {
+    const [sub] = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(and(eq(subscriptionsTable.userId, u.id), eq(subscriptionsTable.freeTrialUsed, 1)))
+      .limit(1);
+    if (sub) { phoneHadTrial = true; break; }
+  }
+
+  // 2. Same device fingerprint on another account that already used a trial
+  let fingerprintHadTrial = false;
+  if (user.deviceFingerprint) {
+    const otherUsersWithFp = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.deviceFingerprint, user.deviceFingerprint),
+        ne(usersTable.id, user.id),
+      ));
+    for (const u of otherUsersWithFp) {
+      const [sub] = await db
+        .select()
+        .from(subscriptionsTable)
+        .where(and(eq(subscriptionsTable.userId, u.id), eq(subscriptionsTable.freeTrialUsed, 1)))
+        .limit(1);
+      if (sub) { fingerprintHadTrial = true; break; }
+    }
+  }
+
+  const eligible = !phoneHadTrial && !fingerprintHadTrial;
+
+  if (eligible) {
+    const now = new Date();
+    const trialEnd = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+    await db
+      .update(subscriptionsTable)
+      .set({ status: "free_trial", startDate: now, endDate: trialEnd, freeTrialUsed: 1 })
+      .where(eq(subscriptionsTable.userId, user.id));
+
+    await createNotification({
+      userId: user.id,
+      type: "free_trial_activated",
+      title: "Welcome — Free Trial Active",
+      message:
+        "Your 2-day free trial is now active. Add a slave account and bind it to a strategy to start receiving copy trades.",
+    });
+
+    logger.info({ userId: user.id, trialEnd }, "OTP verified: 2-day free trial granted");
+    res.json({ message: "Phone verified. Free trial activated.", trialActivated: true });
+  } else {
+    logger.info({ userId: user.id, phoneHadTrial, fingerprintHadTrial }, "OTP verified: trial already used");
+    res.json({
+      message: "Phone verified successfully.",
+      trialActivated: false,
+      trialDeniedReason: "Free trial already used. Please subscribe to continue.",
+    });
+  }
+});
+
+// ── Resend OTP ────────────────────────────────────────────────────────────────
+router.post("/auth/resend-otp", authenticate, async (req, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (user.phoneVerifiedAt) {
+    res.status(400).json({ error: "Phone is already verified" });
+    return;
+  }
+
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  await db
+    .update(usersTable)
+    .set({ otpCode: otp, otpExpiresAt })
+    .where(eq(usersTable.id, user.id));
+  await queueOtpSms(user.id, user.phone, otp);
+
+  logger.info({ userId: user.id }, "OTP resent");
+
+  const response: Record<string, unknown> = {
+    message: "A new verification code has been sent to your phone.",
+  };
+  if (process.env.NODE_ENV !== "production") {
+    response._devOtp = otp;
+  }
+  res.json(response);
+});
+
+// ── OTP Status ────────────────────────────────────────────────────────────────
+router.get("/auth/otp-status", authenticate, async (req, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const [sub] = await db
+    .select()
+    .from(subscriptionsTable)
+    .where(eq(subscriptionsTable.userId, user.id))
+    .limit(1);
+
+  res.json({
+    phoneVerified: !!user.phoneVerifiedAt,
+    requiresOtp: !user.phoneVerifiedAt,
+    subscriptionStatus: sub?.status ?? "expired",
   });
 });
 
+// ── Login ─────────────────────────────────────────────────────────────────────
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
@@ -220,6 +373,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   res.json({
     token,
     mustChangePassword: user.mustChangePassword,
+    requiresOtp: !user.phoneVerifiedAt,
     user: {
       id: user.id,
       name: user.name,

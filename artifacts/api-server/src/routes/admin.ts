@@ -14,6 +14,16 @@ import { decryptCredential } from "../lib/auth";
 
 const router = Router();
 
+// Public platform theme endpoint — used by ThemeProvider for unauthenticated visitors
+router.get("/platform-theme", async (_req, res): Promise<void> => {
+  const [settings] = await db
+    .select({ defaultTheme: adminSettingsTable.defaultTheme })
+    .from(adminSettingsTable)
+    .orderBy(adminSettingsTable.id)
+    .limit(1);
+  res.json({ defaultTheme: settings?.defaultTheme ?? "dark" });
+});
+
 // Public pricing endpoint — no auth required (used by landing page)
 router.get("/pricing", async (_req, res): Promise<void> => {
   const [settings] = await db
@@ -199,6 +209,10 @@ router.patch("/admin/settings", authenticate, requireAdmin, async (req, res): Pr
   if (parsed.data.maxDays != null) updates.maxDays = parsed.data.maxDays;
   if ("metaApiToken" in parsed.data) updates.metaApiToken = parsed.data.metaApiToken ?? null;
   if (parsed.data.expiryWarningDays != null) updates.expiryWarningDays = parsed.data.expiryWarningDays;
+  const rawBody = req.body as { defaultTheme?: string };
+  if (rawBody.defaultTheme && ["dark", "light", "system"].includes(rawBody.defaultTheme)) {
+    updates.defaultTheme = rawBody.defaultTheme;
+  }
 
   let settings;
   if (!existing) {

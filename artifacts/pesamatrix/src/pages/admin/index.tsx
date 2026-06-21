@@ -628,7 +628,7 @@ function MasterApprovalsTab() {
 
       {/* Reject dialog */}
       <Dialog open={rejectId !== null} onOpenChange={() => { setRejectId(null); setRejectReason(""); setRejectError(""); }}>
-        <DialogContent className="dark bg-card border-border">
+        <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle>Reject Master Account</DialogTitle>
           </DialogHeader>

@@ -162,7 +162,7 @@ export default function StrategiesPage() {
         )}
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="dark bg-card border-border">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>New Strategy</DialogTitle>
             </DialogHeader>
@@ -211,7 +211,7 @@ export default function StrategiesPage() {
         </Dialog>
 
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialogContent className="dark bg-card border-border">
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Strategy?</AlertDialogTitle>
               <AlertDialogDescription>This will remove the strategy and all associated bindings.</AlertDialogDescription>

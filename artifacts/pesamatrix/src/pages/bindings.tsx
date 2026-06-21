@@ -191,7 +191,7 @@ export default function BindingsPage() {
         )}
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="dark bg-card border-border">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>New Binding</DialogTitle>
             </DialogHeader>
@@ -268,7 +268,7 @@ export default function BindingsPage() {
         </Dialog>
 
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialogContent className="dark bg-card border-border">
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Binding?</AlertDialogTitle>
               <AlertDialogDescription>This will stop copy trading for this slave account. This cannot be undone.</AlertDialogDescription>

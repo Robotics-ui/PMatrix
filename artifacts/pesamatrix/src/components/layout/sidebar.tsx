@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useThemeContext } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -22,8 +23,17 @@ import {
   Phone,
   Activity,
   MessageSquare,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -55,9 +65,12 @@ const adminNavItems = [
 export function Sidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useThemeContext();
+
+  const ThemeIcon = theme === "light" ? Sun : theme === "system" ? Monitor : Moon;
 
   return (
-    <aside className="flex flex-col w-64 h-screen bg-card border-r border-border shrink-0">
+    <aside className="flex flex-col w-64 h-screen bg-card border-r border-border shrink-0 transition-colors duration-200">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 h-16 border-b border-border shrink-0">
         <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -124,6 +137,32 @@ export function Sidebar() {
             <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                title="Switch theme"
+              >
+                <ThemeIcon className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" side="top">
+              <DropdownMenuItem onClick={() => setTheme("light")} className={cn(theme === "light" && "text-blue-400")}>
+                <Sun className="h-4 w-4 mr-2" />
+                Light
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")} className={cn(theme === "dark" && "text-blue-400")}>
+                <Moon className="h-4 w-4 mr-2" />
+                Dark
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")} className={cn(theme === "system" && "text-blue-400")}>
+                <Monitor className="h-4 w-4 mr-2" />
+                System
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0">
             <LogOut className="h-4 w-4" />
           </Button>

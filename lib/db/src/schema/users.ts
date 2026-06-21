@@ -12,6 +12,11 @@ export const usersTable = pgTable("users", {
   status: text("status").notNull().default("active"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  phoneVerifiedAt: timestamp("phone_verified_at", { withTimezone: true }),
+  otpCode: text("otp_code"),
+  otpExpiresAt: timestamp("otp_expires_at", { withTimezone: true }),
+  deviceFingerprint: text("device_fingerprint"),
+  theme: text("theme").notNull().default("dark"),
 }, (table) => [
   index("users_email_idx").on(table.email),
   index("users_role_idx").on(table.role),

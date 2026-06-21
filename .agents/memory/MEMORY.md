@@ -8,3 +8,6 @@
 - [SMS event type registry](sms-event-types.md) — new SMS event types must be added to SMS_EVENT_TYPES array in lib/db/src/schema/smsTemplates.ts or they fail TypeScript compilation with smsNotifier.ts.
 - [Express 5 params type](express5-params.md) — req.params[key] is typed string | string[] in Express 5; always wrap with String() before parseInt to avoid TS2345.
 - [Custom API calls in frontend](frontend-api-calls.md) — @workspace/api-client-react does NOT export axiosInstance; use native fetch with token from useAuth() for endpoints not covered by generated hooks.
+- [Theme system](theme-system.md) — ThemeProvider applies dark/light to <html> via classList; @custom-variant dark (&:is(.dark *)) means all portals/dialogs inherit correctly; never put dark class on individual page wrappers or dialog content.
+- [OTP free trial flow](otp-trial-flow.md) — register creates expired sub + sends OTP; trial only activates after POST /auth/verify-otp succeeds; pendingToken pattern keeps token in local state until OTP verified (avoids GuestRoute redirect).
+- [SMS OTP direct insert](sms-otp-insert.md) — OTP SMS inserts directly into smsQueueTable with pre-formatted message and eventType="otp_verification"; no template lookup needed since message is pre-formatted.

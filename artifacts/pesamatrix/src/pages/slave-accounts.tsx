@@ -255,7 +255,7 @@ export default function SlaveAccountsPage() {
         )}
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="dark bg-card border-border">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Add Slave Account</DialogTitle>
             </DialogHeader>
@@ -328,7 +328,7 @@ export default function SlaveAccountsPage() {
         </Dialog>
 
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialogContent className="dark bg-card border-border">
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Slave Account?</AlertDialogTitle>
               <AlertDialogDescription>

@@ -21,6 +21,8 @@ router.get("/users/me", authenticate, async (req, res): Promise<void> => {
     role: user.role,
     status: user.status,
     createdAt: user.createdAt,
+    theme: user.theme ?? "dark",
+    phoneVerified: !!user.phoneVerifiedAt,
   });
 });
 
@@ -46,7 +48,24 @@ router.patch("/users/me", authenticate, async (req, res): Promise<void> => {
     role: user.role,
     status: user.status,
     createdAt: user.createdAt,
+    theme: user.theme ?? "dark",
+    phoneVerified: !!user.phoneVerifiedAt,
   });
+});
+
+router.patch("/users/me/theme", authenticate, async (req, res): Promise<void> => {
+  const { theme } = req.body as { theme?: string };
+  if (!theme || !["dark", "light", "system"].includes(theme)) {
+    res.status(400).json({ error: "theme must be one of: dark, light, system" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ theme })
+    .where(eq(usersTable.id, req.userId!));
+
+  res.json({ theme });
 });
 
 export default router;

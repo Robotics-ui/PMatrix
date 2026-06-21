@@ -219,7 +219,7 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
 
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">

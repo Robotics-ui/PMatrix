@@ -63,12 +63,35 @@ router.post("/slave-accounts", authenticate, async (req, res): Promise<void> => 
     .from(subscriptionsTable)
     .where(eq(subscriptionsTable.userId, req.userId!));
 
-  if (!sub || sub.status !== "active") {
+  if (!sub || (sub.status !== "active" && sub.status !== "free_trial")) {
     res.status(400).json({ error: "Active subscription required to add slave accounts" });
     return;
   }
 
   const { broker, server, mt5Login, investorPassword, platform = "mt5" } = parsed.data;
+
+  // During free trial — check if this MT5 login was already used in another trial
+  if (sub.status === "free_trial") {
+    const existingSlaveWithSameLogin = await db
+      .select({ userId: slaveAccountsTable.userId })
+      .from(slaveAccountsTable)
+      .where(eq(slaveAccountsTable.mt5Login, mt5Login));
+
+    for (const existing of existingSlaveWithSameLogin) {
+      if (existing.userId === req.userId!) continue;
+      const [otherSub] = await db
+        .select()
+        .from(subscriptionsTable)
+        .where(eq(subscriptionsTable.userId, existing.userId))
+        .limit(1);
+      if (otherSub && otherSub.freeTrialUsed === 1) {
+        res.status(400).json({
+          error: "This MT5 account was already used in a free trial. Please use a different account or subscribe.",
+        });
+        return;
+      }
+    }
+  }
 
   let metaapiAccountId: string | null = null;
   let subscriberId: string | null = null;

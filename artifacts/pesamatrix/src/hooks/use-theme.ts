@@ -1,7 +1,1 @@
-import { useEffect } from "react";
-
-export function useTheme() {
-  useEffect(() => {
-    document.documentElement.classList.add("dark");
-  }, []);
-}
+export { useThemeContext as useTheme, ThemeProvider, type Theme, type ResolvedTheme } from "@/contexts/theme-context";

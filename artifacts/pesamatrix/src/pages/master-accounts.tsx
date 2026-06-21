@@ -330,7 +330,7 @@ export default function MasterAccountsPage() {
         )}
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="dark bg-card border-border">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Submit Master Account for Approval</DialogTitle>
             </DialogHeader>
@@ -404,7 +404,7 @@ export default function MasterAccountsPage() {
         </Dialog>
 
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialogContent className="dark bg-card border-border">
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Master Account?</AlertDialogTitle>
               <AlertDialogDescription>
