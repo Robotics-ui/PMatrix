@@ -32,6 +32,7 @@ import {
   Shield, Users, CreditCard, Settings, RefreshCw, TrendingUp, AlertCircle,
   CheckCircle2, Eye, EyeOff, Webhook, Copy, Check, XCircle, Activity,
   Clock, Zap, AlertTriangle, Link2, Link2Off, RotateCcw, Server, ThumbsUp, ThumbsDown, Radio, KeyRound,
+  Gift, Plus, Trash2, Pencil,
 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1159,6 +1160,196 @@ function BannerSettingsTab() {
   );
 }
 
+type ReferralSetting = { id: number; referralsRequired: number; rewardDays: number; isEnabled: boolean };
+
+function ReferralSettingsTab() {
+  const [milestones, setMilestones] = useState<ReferralSetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState({ referralsRequired: "", rewardDays: "" });
+  const [showAdd, setShowAdd] = useState(false);
+
+  const token = () => localStorage.getItem("token") ?? "";
+
+  async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
+    const res = await fetch(path, {
+      ...opts,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}`, ...(opts.headers ?? {}) },
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error((b as { error?: string }).error ?? res.statusText);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await apiFetch<ReferralSetting[]>("/api/admin/referral-settings");
+      setMilestones(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function handleAdd() {
+    const r = parseInt(form.referralsRequired);
+    const d = parseInt(form.rewardDays);
+    if (isNaN(r) || r < 1 || isNaN(d) || d < 1) { setError("Both fields must be positive numbers"); return; }
+    setSaving(true); setError("");
+    try {
+      await apiFetch("/api/admin/referral-settings", { method: "POST", body: JSON.stringify({ referralsRequired: r, rewardDays: d }) });
+      setForm({ referralsRequired: "", rewardDays: "" });
+      setShowAdd(false);
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleSave(id: number) {
+    const m = milestones.find((x) => x.id === id);
+    if (!m) return;
+    setSaving(true); setError("");
+    try {
+      const updated = await apiFetch<ReferralSetting>(`/api/admin/referral-settings/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ referralsRequired: parseInt(form.referralsRequired) || m.referralsRequired, rewardDays: parseInt(form.rewardDays) || m.rewardDays }),
+      });
+      setMilestones((prev) => prev.map((x) => x.id === id ? updated : x));
+      setEditId(null);
+    } catch (e) { setError((e as Error).message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleToggle(id: number, isEnabled: boolean) {
+    try {
+      const updated = await apiFetch<ReferralSetting>(`/api/admin/referral-settings/${id}`, { method: "PATCH", body: JSON.stringify({ isEnabled }) });
+      setMilestones((prev) => prev.map((x) => x.id === id ? updated : x));
+    } catch (e) { setError((e as Error).message); }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await apiFetch(`/api/admin/referral-settings/${id}`, { method: "DELETE" });
+      setMilestones((prev) => prev.filter((x) => x.id !== id));
+    } catch (e) { setError((e as Error).message); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Gift className="h-4 w-4 text-blue-400" />
+                Referral Reward Milestones
+              </CardTitle>
+              <CardDescription className="mt-1">
+                When a user reaches a milestone (number of referrals who subscribe), they earn bonus trading days.
+              </CardDescription>
+            </div>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setShowAdd(true); setError(""); }}>
+              <Plus className="h-4 w-4 mr-1" /> Add Milestone
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+            </div>
+          )}
+
+          {showAdd && (
+            <div className="flex items-end gap-3 p-3 rounded border border-blue-600/30 bg-blue-600/5">
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs">Referrals Required</Label>
+                <Input type="number" min="1" placeholder="e.g. 3" value={form.referralsRequired} onChange={(e) => setForm((f) => ({ ...f, referralsRequired: e.target.value }))} className="h-8" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs">Reward Days</Label>
+                <Input type="number" min="1" placeholder="e.g. 7" value={form.rewardDays} onChange={(e) => setForm((f) => ({ ...f, rewardDays: e.target.value }))} className="h-8" />
+              </div>
+              <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8" disabled={saving} onClick={() => void handleAdd()}>Save</Button>
+              <Button size="sm" variant="outline" className="h-8" onClick={() => { setShowAdd(false); setForm({ referralsRequired: "", rewardDays: "" }); }}>Cancel</Button>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center py-6"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : milestones.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No milestones yet. Add one above.</p>
+          ) : (
+            <div className="space-y-2">
+              {milestones.sort((a, b) => a.referralsRequired - b.referralsRequired).map((m) => (
+                <div key={m.id} className={`flex items-center gap-3 p-3 rounded border ${m.isEnabled ? "border-border" : "border-border/40 opacity-60"}`}>
+                  {editId === m.id ? (
+                    <>
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Referrals</Label>
+                          <Input type="number" min="1" defaultValue={m.referralsRequired} onChange={(e) => setForm((f) => ({ ...f, referralsRequired: e.target.value }))} className="h-7 w-20 text-sm" />
+                        </div>
+                        <span className="text-muted-foreground text-sm mt-4">=</span>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Reward Days</Label>
+                          <Input type="number" min="1" defaultValue={m.rewardDays} onChange={(e) => setForm((f) => ({ ...f, rewardDays: e.target.value }))} className="h-7 w-20 text-sm" />
+                        </div>
+                      </div>
+                      <Button size="sm" className="h-7 bg-green-600 hover:bg-green-700 text-xs" disabled={saving} onClick={() => void handleSave(m.id)}>Save</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditId(null)}>Cancel</Button>
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="h-4 w-4 text-blue-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {m.referralsRequired} referral{m.referralsRequired !== 1 ? "s" : ""} <span className="text-muted-foreground">→</span> <span className="text-green-400">{m.rewardDays} bonus day{m.rewardDays !== 1 ? "s" : ""}</span>
+                        </p>
+                      </div>
+                      <Badge className={m.isEnabled ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-gray-500/20 text-gray-400 border-gray-500/30"}>
+                        {m.isEnabled ? "Active" : "Disabled"}
+                      </Badge>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-blue-400" onClick={() => { setEditId(m.id); setForm({ referralsRequired: String(m.referralsRequired), rewardDays: String(m.rewardDays) }); }}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" title={m.isEnabled ? "Disable" : "Enable"} onClick={() => void handleToggle(m.id, !m.isEnabled)}>
+                        {m.isEnabled ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => void handleDelete(m.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">How It Works</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>Each user gets a unique promo code on registration. When a new user signs up using that code and makes their first payment, the referrer earns bonus trading days based on the matching milestone.</p>
+          <p>Milestones are checked cumulatively — if a user reaches 3 referrals and the milestone gives 7 days, those 7 days are added to their subscription when the milestone is hit.</p>
+          <p>Disable a milestone to stop awarding it without deleting it.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -1294,6 +1485,7 @@ export default function AdminPage() {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="monitor">Enforcement Monitor</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="referrals">Referrals</TabsTrigger>
             <TabsTrigger value="banner">Market Banner</TabsTrigger>
           </TabsList>
 
@@ -1529,6 +1721,11 @@ export default function AdminPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Referral Settings tab */}
+          <TabsContent value="referrals">
+            <ReferralSettingsTab />
           </TabsContent>
 
           {/* Market Banner tab */}
