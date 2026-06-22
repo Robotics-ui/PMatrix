@@ -1,11 +1,13 @@
+import { useRef, useState } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAuth } from "@/hooks/use-auth";
-import { useGetDashboardSummary, useGetMySubscription, useGetAdminSettings } from "@workspace/api-client-react";
+import { useGetDashboardSummary, useGetMySubscription, useGetAdminSettings, getGetMySubscriptionQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp,
   Server,
@@ -17,11 +19,221 @@ import {
   Clock,
   Activity,
   AlertCircle,
+  Phone,
+  CheckCircle,
+  RefreshCw,
 } from "lucide-react";
 
 interface CriticalAnnouncement {
   id: number; title: string; message: string; priority: string;
 }
+
+interface OtpStatus {
+  phoneVerified: boolean;
+  requiresOtp: boolean;
+  subscriptionStatus: string;
+}
+
+// ── Phone Verification Banner ─────────────────────────────────────────────────
+
+function PhoneVerificationBanner({ token }: { token: string | null }) {
+  const queryClient = useQueryClient();
+
+  const { data: otpStatus, refetch: refetchOtpStatus } = useQuery<OtpStatus>({
+    queryKey: ["otp-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/otp-status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return { phoneVerified: true, requiresOtp: false, subscriptionStatus: "expired" };
+      return res.json() as Promise<OtpStatus>;
+    },
+    enabled: !!token,
+    staleTime: 30_000,
+  });
+
+  const [otp, setOtp] = useState("");
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startCooldown() {
+    setResendCooldown(60);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((c) => {
+        if (c <= 1) {
+          clearInterval(cooldownRef.current!);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  }
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setVerifyError("");
+    setIsVerifying(true);
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code: otp.trim() }),
+      });
+      const result = (await res.json()) as {
+        trialActivated?: boolean;
+        message?: string;
+        trialDeniedReason?: string;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        setVerifyError(result.error ?? "Verification failed");
+        return;
+      }
+
+      setVerified(true);
+      await refetchOtpStatus();
+      queryClient.invalidateQueries({ queryKey: getGetMySubscriptionQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+
+      if (!result.trialActivated && result.trialDeniedReason) {
+        setVerifyError(result.trialDeniedReason);
+      }
+    } catch {
+      setVerifyError("Verification failed. Please try again.");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!token || resendCooldown > 0) return;
+    setIsResending(true);
+    setVerifyError("");
+    try {
+      const res = await fetch("/api/auth/resend-otp", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = (await res.json()) as { _devOtp?: string; error?: string };
+      if (!res.ok) {
+        setVerifyError(result.error ?? "Failed to send code");
+        return;
+      }
+      if (result._devOtp) setDevOtp(result._devOtp);
+      startCooldown();
+    } catch {
+      setVerifyError("Failed to send code. Please try again.");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  // Don't show if status not loaded or phone already verified
+  if (!otpStatus || !otpStatus.requiresOtp) return null;
+
+  // Trial already used — show subscribe prompt instead
+  const trialDenied = verified && verifyError;
+
+  return (
+    <div className="rounded-lg border border-blue-500/40 bg-blue-600/10 p-4">
+      <div className="flex items-start gap-3">
+        <div className="h-9 w-9 rounded-full bg-blue-600/20 border border-blue-600/40 flex items-center justify-center shrink-0 mt-0.5">
+          <Phone className="h-4 w-4 text-blue-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-blue-300">
+            {verified && !verifyError
+              ? "Phone verified — free trial active"
+              : "Verify your phone to activate your free trial"}
+          </p>
+          {verified && !verifyError ? (
+            <div className="flex items-center gap-1.5 mt-1">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <p className="text-sm text-green-400">Your 2-day free trial has been activated.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-blue-300/70 mt-0.5">
+              {trialDenied
+                ? verifyError
+                : "Enter the 6-digit code sent to your registered phone number."}
+            </p>
+          )}
+
+          {!verified && (
+            <>
+              {devOtp && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-300/80">
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                  Dev mode — code: <strong>{devOtp}</strong>
+                </div>
+              )}
+
+              {verifyError && !trialDenied && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  {verifyError}
+                </div>
+              )}
+
+              <form onSubmit={handleVerify} className="mt-3 flex items-center gap-2 flex-wrap">
+                <Input
+                  placeholder="123456"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  className="w-32 text-center font-mono tracking-widest text-sm"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={isVerifying || otp.length < 6}
+                >
+                  {isVerifying ? "Verifying..." : "Verify"}
+                </Button>
+                {resendCooldown > 0 ? (
+                  <span className="text-xs text-muted-foreground">{resendCooldown}s</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={isResending}
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isResending ? "animate-spin" : ""}`} />
+                    {isResending ? "Sending..." : "Resend code"}
+                  </button>
+                )}
+              </form>
+            </>
+          )}
+
+          {trialDenied && (
+            <div className="mt-3">
+              <Link href="/payment">
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Subscribe Now</Button>
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Critical Announcements ────────────────────────────────────────────────────
 
 function CriticalAnnouncementBanner({ token }: { token: string | null }) {
   const { data: announcements = [] } = useQuery<CriticalAnnouncement[]>({
@@ -54,6 +266,8 @@ function CriticalAnnouncementBanner({ token }: { token: string | null }) {
     </div>
   );
 }
+
+// ── Subscription Countdown ────────────────────────────────────────────────────
 
 function SubscriptionCountdown({ endDate, daysLeft }: { endDate?: string | null; daysLeft?: number | null }) {
   if (!endDate || !daysLeft || daysLeft <= 0) {
@@ -103,6 +317,8 @@ function SubscriptionCountdown({ endDate, daysLeft }: { endDate?: string | null;
   );
 }
 
+// ── Dashboard Page ────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const { data: summary, isLoading } = useGetDashboardSummary();
@@ -128,6 +344,9 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name?.split(" ")[0]}</h1>
           <p className="text-muted-foreground text-sm mt-1">Here&apos;s your trading overview</p>
         </div>
+
+        {/* Phone verification banner — shown when OTP is pending */}
+        <PhoneVerificationBanner token={token} />
 
         {/* Critical announcements */}
         <CriticalAnnouncementBanner token={token} />
@@ -222,12 +441,12 @@ export default function DashboardPage() {
                     <span className="text-muted-foreground">Status</span>
                     <Badge
                       className={
-                        subscription.status === "active"
+                        subscription.status === "active" || subscription.status === "free_trial"
                           ? "bg-green-500/20 text-green-400 border-green-500/30"
                           : "bg-red-500/20 text-red-400 border-red-500/30"
                       }
                     >
-                      {subscription.status}
+                      {subscription.status === "free_trial" ? "Free Trial" : subscription.status}
                     </Badge>
                   </div>
                   {subscription.startDate && (
