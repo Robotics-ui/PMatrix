@@ -8,6 +8,29 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, TrendingUp, CheckCircle, Phone } from "lucide-react";
 
+const COOLDOWN_TOTAL = 60;
+
+function CountdownRing({ seconds }: { seconds: number }) {
+  const r = 18;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (seconds / COOLDOWN_TOTAL);
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width="44" height="44" className="-rotate-90" aria-hidden>
+        <circle cx="22" cy="22" r={r} fill="none" strokeWidth="2.5" className="stroke-muted-foreground/20" />
+        <circle
+          cx="22" cy="22" r={r}
+          fill="none" strokeWidth="2.5" strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ - offset}
+          className="stroke-blue-500 transition-[stroke-dashoffset] duration-1000 ease-linear"
+        />
+      </svg>
+      <span className="absolute text-xs font-mono font-semibold text-blue-400">{seconds}</span>
+    </div>
+  );
+}
+
 type Step = "register" | "verify";
 
 export default function RegisterPage() {
@@ -313,19 +336,29 @@ export default function RegisterPage() {
                   {isVerifying ? "Verifying..." : "Verify phone number"}
                 </Button>
               </form>
-              <div className="mt-4 text-center">
+              <div className="mt-5 flex flex-col items-center gap-2">
                 {resendCooldown > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Resend code in {resendCooldown}s
-                  </p>
+                  <>
+                    <CountdownRing seconds={resendCooldown} />
+                    <p className="text-xs text-muted-foreground">
+                      Resend available in <span className="font-semibold text-blue-400">{resendCooldown}s</span>
+                    </p>
+                  </>
                 ) : (
                   <button
                     type="button"
                     onClick={handleResend}
                     disabled={isResending}
-                    className="text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                    className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
                   >
-                    {isResending ? "Sending..." : "Resend code"}
+                    {isResending ? (
+                      <>
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Didn't receive it? Resend code"
+                    )}
                   </button>
                 )}
               </div>

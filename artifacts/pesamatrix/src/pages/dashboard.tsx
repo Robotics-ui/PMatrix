@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useGetDashboardSummary, useGetMySubscription, useGetAdminSettings, getGetMySubscriptionQueryKey } from "@workspace/api-client-react";
@@ -38,6 +38,29 @@ interface OtpStatus {
   subscriptionStatus: string;
 }
 
+const COOLDOWN_TOTAL = 60;
+
+function CountdownRing({ seconds }: { seconds: number }) {
+  const r = 18;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (seconds / COOLDOWN_TOTAL);
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width="36" height="36" className="-rotate-90" aria-hidden>
+        <circle cx="18" cy="18" r={r} fill="none" strokeWidth="2.5" className="stroke-muted-foreground/20" />
+        <circle
+          cx="18" cy="18" r={r}
+          fill="none" strokeWidth="2.5" strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ - offset}
+          className="stroke-blue-500 transition-[stroke-dashoffset] duration-1000 ease-linear"
+        />
+      </svg>
+      <span className="absolute text-[10px] font-mono font-semibold text-blue-400">{seconds}</span>
+    </div>
+  );
+}
+
 // ── Phone Verification Banner ─────────────────────────────────────────────────
 
 function PhoneVerificationBanner({ token }: { token: string | null }) {
@@ -65,8 +88,9 @@ function PhoneVerificationBanner({ token }: { token: string | null }) {
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function startCooldown() {
-    setResendCooldown(60);
+  function startCooldown(seconds = COOLDOWN_TOTAL) {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setResendCooldown(seconds);
     cooldownRef.current = setInterval(() => {
       setResendCooldown((c) => {
         if (c <= 1) {
@@ -77,6 +101,13 @@ function PhoneVerificationBanner({ token }: { token: string | null }) {
       });
     }, 1000);
   }
+
+  // Start initial cooldown on mount — OTP was already sent at registration
+  useEffect(() => {
+    startCooldown();
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,20 +238,36 @@ function PhoneVerificationBanner({ token }: { token: string | null }) {
                 >
                   {isVerifying ? "Verifying..." : "Verify"}
                 </Button>
+              </form>
+              <div className="mt-3 flex items-center gap-2">
                 {resendCooldown > 0 ? (
-                  <span className="text-xs text-muted-foreground">{resendCooldown}s</span>
+                  <>
+                    <CountdownRing seconds={resendCooldown} />
+                    <span className="text-xs text-muted-foreground">
+                      Resend in <span className="font-semibold text-blue-400">{resendCooldown}s</span>
+                    </span>
+                  </>
                 ) : (
                   <button
                     type="button"
                     onClick={handleResend}
                     disabled={isResending}
-                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
                   >
-                    <RefreshCw className={`h-3 w-3 ${isResending ? "animate-spin" : ""}`} />
-                    {isResending ? "Sending..." : "Resend code"}
+                    {isResending ? (
+                      <>
+                        <span className="h-3 w-3 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" />
+                        Resend code
+                      </>
+                    )}
                   </button>
                 )}
-              </form>
+              </div>
             </>
           )}
 
