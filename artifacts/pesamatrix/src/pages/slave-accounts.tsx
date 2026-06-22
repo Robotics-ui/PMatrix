@@ -158,13 +158,13 @@ export default function SlaveAccountsPage() {
               {[
                 {
                   icon: KeyRound,
-                  title: "Get your trading (master) password",
-                  detail: "Log into your broker portal or MT5/MT4 terminal and copy your trading password (also called the master password). Do not use the investor/read-only password — CopyFactory requires full write access to open, modify, and close trades on your account.",
+                  title: "Get your trading password",
+                  detail: "Log into your broker portal or MT5/MT4 terminal and copy your trading password. This is not the investor's password — slave accounts require the trading password so CopyFactory can open, modify, and close trades on your behalf.",
                 },
                 {
                   icon: Users,
                   title: "Enter your login number and trading password",
-                  detail: "Your login is the account number shown in MT5 (e.g. 12345678). The trading password is required so MetaApi's CopyFactory engine can execute copied trades on this account.",
+                  detail: "Your login is the account number shown in MT5 (e.g. 12345678). You must use the trading password, not the investor's password — only the trading password gives CopyFactory the write access needed to execute copied trades.",
                 },
                 {
                   icon: ServerIcon,
