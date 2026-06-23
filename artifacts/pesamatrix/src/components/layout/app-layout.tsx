@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./sidebar";
 import { ForexBanner } from "@/components/forex-banner";
 import { CustomerCareFooter } from "./customer-care-footer";
+import { FloatingContactButton } from "./floating-contact-button";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -44,6 +45,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <CustomerCareFooter />
         </main>
       </div>
+      <FloatingContactButton />
     </div>
   );
 }

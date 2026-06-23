@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useGetCustomerCareSettings, getGetCustomerCareSettingsQueryKey } from "@workspace/api-client-react";
+import { FloatingContactButton } from "@/components/layout/floating-contact-button";
 
 const features = [
   { icon: Cloud, title: "Cloud-to-Cloud Trading", desc: "Trades are replicated automatically between MT5 accounts with zero manual intervention." },
@@ -231,6 +232,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <FloatingContactButton />
 
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
