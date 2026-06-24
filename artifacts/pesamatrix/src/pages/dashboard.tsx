@@ -26,6 +26,8 @@ import {
   RefreshCw,
   HelpCircle,
   ChevronRight,
+  Copy,
+  Gift,
 } from "lucide-react";
 
 interface CriticalAnnouncement {
@@ -411,6 +413,136 @@ function GettingStartedChecklist({
   );
 }
 
+// ── Referral Card ─────────────────────────────────────────────────────────────
+
+interface MyReferralData {
+  promoCode: string | null;
+  totalReferrals: number;
+  pendingRewards: number;
+  totalRewardDays: number;
+}
+
+function ReferralCard({ token }: { token: string | null }) {
+  const { data, isLoading } = useQuery<MyReferralData>({
+    queryKey: ["referrals-my"],
+    queryFn: async () => {
+      const res = await fetch("/api/referrals/my", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load referral data");
+      return res.json() as Promise<MyReferralData>;
+    },
+    enabled: !!token,
+    staleTime: 60_000,
+  });
+
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const promoCode = data?.promoCode ?? null;
+  const referralLink = promoCode
+    ? `${window.location.origin}/register?ref=${promoCode}`
+    : null;
+
+  function copyText(text: string, type: "code" | "link") {
+    void navigator.clipboard.writeText(text).then(() => {
+      if (type === "code") {
+        setCodeCopied(true);
+        setTimeout(() => setCodeCopied(false), 2000);
+      } else {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      }
+    });
+  }
+
+  if (isLoading) return null;
+  if (!promoCode) return null;
+
+  return (
+    <Card className="border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Gift className="h-4 w-4 text-green-400" />
+          Refer a Friend
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Share your code and earn bonus trading days for every friend who subscribes.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Stats row */}
+        {(data!.totalReferrals > 0 || data!.totalRewardDays > 0) && (
+          <div className="flex gap-4">
+            <div className="flex-1 rounded-lg bg-muted/40 px-4 py-3 text-center">
+              <p className="text-xl font-bold text-foreground">{data!.totalReferrals}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Friends referred</p>
+            </div>
+            <div className="flex-1 rounded-lg bg-muted/40 px-4 py-3 text-center">
+              <p className="text-xl font-bold text-green-400">{data!.totalRewardDays}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Bonus days earned</p>
+            </div>
+            {data!.pendingRewards > 0 && (
+              <div className="flex-1 rounded-lg bg-blue-600/10 px-4 py-3 text-center">
+                <p className="text-xl font-bold text-blue-400">{data!.pendingRewards}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Pending rewards</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Code copy */}
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Your referral code</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-md border border-border bg-muted/30 px-3 py-2 font-mono text-sm font-semibold tracking-widest text-foreground select-all">
+              {promoCode}
+            </div>
+            <button
+              onClick={() => copyText(promoCode, "code")}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors shrink-0 ${
+                codeCopied
+                  ? "border-green-500/50 bg-green-500/10 text-green-400"
+                  : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {codeCopied ? (
+                <><CheckCircle2 className="h-3.5 w-3.5" /> Copied</>
+              ) : (
+                <><Copy className="h-3.5 w-3.5" /> Copy</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Link copy */}
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Or share your referral link</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground truncate select-all font-mono">
+              {referralLink}
+            </div>
+            <button
+              onClick={() => copyText(referralLink!, "link")}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors shrink-0 ${
+                linkCopied
+                  ? "border-green-500/50 bg-green-500/10 text-green-400"
+                  : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {linkCopied ? (
+                <><CheckCircle2 className="h-3.5 w-3.5" /> Copied</>
+              ) : (
+                <><Copy className="h-3.5 w-3.5" /> Copy</>
+              )}
+            </button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── FAQ Widget ────────────────────────────────────────────────────────────────
 
 interface FaqItem { id: number; question: string; category: string; viewCount: number; }
@@ -722,6 +854,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Referral card */}
+        <ReferralCard token={token} />
 
         {/* Popular FAQs widget */}
         <FaqWidget />
