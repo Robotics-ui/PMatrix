@@ -4,7 +4,7 @@ import { db, bindingsTable, subscriptionsTable, slaveAccountsTable, strategiesTa
 import { CreateBindingBody, DeleteBindingParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { requireActiveSubscription } from "../middlewares/requireActiveSubscription";
-import { syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
+import { syncSlaveSubscriberToCopyFactory, ensureSlaveSubscriberRole } from "../lib/metaapi";
 
 const router = Router();
 
@@ -113,6 +113,9 @@ router.post("/bindings", authenticate, async (req, res): Promise<void> => {
     })
     .returning();
 
+  // Ensure subscriber role is registered before syncing subscriptions.
+  // Auto-fixes any missing CopyFactory registration before the binding takes effect.
+  await ensureSlaveSubscriberRole(slaveAccountId);
   await syncSlaveSubscriberToCopyFactory(slaveAccountId);
 
   res.status(201).json({

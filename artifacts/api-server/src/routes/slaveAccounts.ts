@@ -5,7 +5,7 @@ import { CreateSlaveAccountBody, DeleteSlaveAccountParams, RefreshSlaveAccountSt
 import { authenticate } from "../middlewares/authenticate";
 import { requireActiveSubscription } from "../middlewares/requireActiveSubscription";
 import { encryptCredential } from "../lib/auth";
-import { getMetaApiToken, callMetaApi, mapMetaApiState } from "../lib/metaapi";
+import { getMetaApiToken, callMetaApi, mapMetaApiState, ensureSlaveSubscriberRole } from "../lib/metaapi";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -191,6 +191,13 @@ router.post("/slave-accounts", authenticate, async (req, res): Promise<void> => 
       metaapiRegion,
     })
     .returning();
+
+  // Fire-and-forget: register this account as a CopyFactory subscriber.
+  // The account is still DEPLOYING at this point so CopyFactory may reject it;
+  // binding creation will re-attempt auto-fix before any sync.
+  if (account.metaapiAccountId) {
+    ensureSlaveSubscriberRole(account.id).catch(() => {});
+  }
 
   res.status(201).json(serializeAccount(account));
 });

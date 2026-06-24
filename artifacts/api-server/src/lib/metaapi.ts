@@ -244,6 +244,159 @@ export async function registerMasterAsProvider(
   }
 }
 
+// ── CopyFactory subscriber role check & auto-fix ─────────────────────────────
+
+/**
+ * Verifies that a slave account is registered as a CopyFactory subscriber and
+ * auto-fixes the registration if it is missing.
+ *
+ * Steps:
+ *   1. GET the subscriber record from CopyFactory. A 404 means it was never
+ *      registered; any other non-OK status is treated as an unknown error.
+ *   2. If the record is absent, ensure the MetaApi provisioning account has the
+ *      "subscriber" role (PUT roles: ["subscriber"] on the provisioning API).
+ *   3. PUT the subscriber configuration to CopyFactory (empty subscriptions list
+ *      is fine — syncSlaveSubscriberToCopyFactory will fill it in afterwards).
+ *   4. Persist the result in the slave_accounts diagnostic columns so the admin
+ *      can see registration state without hitting the CopyFactory API.
+ *
+ * Returns `true` when the account is confirmed or newly registered, `false`
+ * on any unrecoverable error.
+ */
+export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise<boolean> {
+  const token = await getMetaApiToken();
+  if (!token) {
+    logger.debug({ slaveAccountId }, "MetaApi token not configured — skipping subscriber role check");
+    return false;
+  }
+
+  const [slave] = await db
+    .select()
+    .from(slaveAccountsTable)
+    .where(eq(slaveAccountsTable.id, slaveAccountId));
+
+  if (!slave?.metaapiAccountId) {
+    logger.debug({ slaveAccountId }, "Slave has no MetaApi account ID — skipping subscriber role check");
+    return false;
+  }
+
+  const { metaapiAccountId } = slave;
+
+  // ── Step 1: Check whether already registered in CopyFactory ────────────────
+  let alreadyRegistered = false;
+  try {
+    const checkResult = await callMetaApi(
+      "GET",
+      `${COPYFACTORY_API}/users/current/configuration/subscribers/${metaapiAccountId}`,
+      token
+    );
+
+    if (checkResult.ok) {
+      // Already registered — refresh diagnostic columns and return early
+      alreadyRegistered = true;
+      logger.info(
+        { slaveAccountId, metaapiAccountId },
+        "CopyFactory subscriber already registered — no action needed"
+      );
+      await db
+        .update(slaveAccountsTable)
+        .set({
+          copyFactorySubscriberId: metaapiAccountId,
+          copyFactorySubscriberStatus: "registered",
+          copyFactoryLastApiResponse: JSON.stringify(checkResult.data).slice(0, 1000),
+          copyFactoryLastError: null,
+        })
+        .where(eq(slaveAccountsTable.id, slaveAccountId));
+      return true;
+    }
+
+    if (checkResult.status !== 404) {
+      // Unexpected error from CopyFactory — log and continue to attempt registration
+      logger.warn(
+        { slaveAccountId, metaapiAccountId, status: checkResult.status, body: checkResult.data },
+        "CopyFactory subscriber GET returned unexpected status — will attempt registration anyway"
+      );
+    }
+    // 404 → not registered yet; fall through to registration steps
+  } catch (err) {
+    logger.warn({ err, slaveAccountId }, "CopyFactory subscriber GET failed — will attempt registration");
+  }
+
+  if (alreadyRegistered) return true;
+
+  // ── Step 2: Assign subscriber role on MetaApi provisioning account ──────────
+  try {
+    const roleResult = await callMetaApi(
+      "PUT",
+      `${PROVISIONING_API}/users/current/accounts/${metaapiAccountId}`,
+      token,
+      { roles: ["subscriber"] }
+    );
+    if (!roleResult.ok) {
+      logger.warn(
+        { slaveAccountId, metaapiAccountId, status: roleResult.status, body: roleResult.data },
+        "CopyFactory: setting subscriber role returned non-OK (continuing to CF registration)"
+      );
+    } else {
+      logger.info({ slaveAccountId, metaapiAccountId }, "CopyFactory: subscriber role set on MetaApi provisioning account");
+    }
+  } catch (err) {
+    logger.warn({ err, slaveAccountId }, "CopyFactory: error setting subscriber role (continuing)");
+  }
+
+  // ── Step 3: Register subscriber configuration in CopyFactory ────────────────
+  try {
+    const regResult = await callMetaApi(
+      "PUT",
+      `${COPYFACTORY_API}/users/current/configuration/subscribers/${metaapiAccountId}`,
+      token,
+      { subscriptions: [] }
+    );
+
+    const ok = regResult.ok || regResult.status === 204;
+    const responseSnippet = JSON.stringify(regResult.data).slice(0, 1000);
+
+    await db
+      .update(slaveAccountsTable)
+      .set({
+        copyFactorySubscriberId: ok ? metaapiAccountId : null,
+        copyFactorySubscriberStatus: ok ? "registered" : "failed",
+        copyFactorySubscriberRegisteredAt: ok ? new Date() : null,
+        copyFactoryLastApiResponse: responseSnippet,
+        copyFactoryLastError: ok
+          ? null
+          : `CF subscriber PUT returned HTTP ${regResult.status}: ${responseSnippet.slice(0, 300)}`,
+      })
+      .where(eq(slaveAccountsTable.id, slaveAccountId));
+
+    if (ok) {
+      logger.info(
+        { slaveAccountId, metaapiAccountId },
+        "CopyFactory subscriber registered successfully (auto-fixed)"
+      );
+    } else {
+      logger.error(
+        { slaveAccountId, metaapiAccountId, status: regResult.status, body: regResult.data },
+        "CopyFactory subscriber registration failed"
+      );
+    }
+
+    return ok;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await db
+      .update(slaveAccountsTable)
+      .set({
+        copyFactorySubscriberStatus: "failed",
+        copyFactoryLastError: msg,
+        copyFactoryLastApiResponse: null,
+      })
+      .where(eq(slaveAccountsTable.id, slaveAccountId));
+    logger.error({ err, slaveAccountId, metaapiAccountId }, "CopyFactory subscriber registration network error");
+    return false;
+  }
+}
+
 // ── CopyFactory subscriber sync ───────────────────────────────────────────────
 
 /**
