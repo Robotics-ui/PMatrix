@@ -75,10 +75,13 @@ async function ensureProviderRegistered(
   copyFactoryProviderStatus: string | null
 ): Promise<void> {
   if (copyFactoryProviderStatus === "registered") return;
-  // Fire-and-forget — don't block lifecycle advancement
-  registerMasterAsProvider(id, metaapiAccountId, `${broker}-${mt5Login}`).catch((err) => {
+  // Awaited — strategy creation is blocked until provider is registered, so we must
+  // complete registration before the account can advance past "deployed".
+  try {
+    await registerMasterAsProvider(id, metaapiAccountId, `${broker}-${mt5Login}`);
+  } catch (err) {
     logger.warn({ err, id }, "CopyFactory auto-provider registration failed");
-  });
+  }
 }
 
 async function advanceMasterAccount(
@@ -127,7 +130,17 @@ async function advanceMasterAccount(
       newStatus = "disconnected";
     }
 
-    if (newStatus === null || newStatus === currentStatus) return;
+    // If status hasn't changed, retry provider registration for accounts stuck at a live
+    // state where the provider was never registered (e.g. registered before this feature
+    // existed, or a previous registration attempt failed and was never retried).
+    if (newStatus === null || newStatus === currentStatus) {
+      const PROVIDER_RETRY_STATUSES = new Set(["deployed", "strategy_created", "active"]);
+      if (PROVIDER_RETRY_STATUSES.has(currentStatus) && copyFactoryProviderStatus !== "registered") {
+        logger.info({ id, metaapiAccountId, currentStatus }, "Provider not registered — retrying on poller tick");
+        await ensureProviderRegistered(id, metaapiAccountId, broker, mt5Login, copyFactoryProviderStatus);
+      }
+      return;
+    }
 
     await db
       .update(masterAccountsTable)
@@ -157,7 +170,8 @@ async function advanceMasterAccount(
       });
     }
 
-    // Auto-register as CopyFactory provider when account first reaches a live state
+    // Auto-register as CopyFactory provider when account first reaches a live state.
+    // This is awaited — strategy creation is blocked until copyFactoryProviderStatus === "registered".
     const PROVIDER_ELIGIBLE = new Set(["deployed", "strategy_created", "active"]);
     if (PROVIDER_ELIGIBLE.has(newStatus)) {
       await ensureProviderRegistered(id, metaapiAccountId, broker, mt5Login, copyFactoryProviderStatus);

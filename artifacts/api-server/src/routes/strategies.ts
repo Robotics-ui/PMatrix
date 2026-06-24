@@ -70,10 +70,30 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
     return;
   }
 
+  const metaapiToken = await getMetaApiToken();
+
+  // Guard: CopyFactory provider role must be registered before a strategy can be created.
+  // This ensures MetaApi recognises the account as a signal source ("provider role").
+  // In demo mode (no METAAPI_TOKEN) this check is bypassed.
+  if (metaapiToken && masterAccount.metaapiAccountId && masterAccount.copyFactoryProviderStatus !== "registered") {
+    const cfStatus = masterAccount.copyFactoryProviderStatus ?? "none";
+    const errMsg =
+      cfStatus === "failed"
+        ? `CopyFactory provider registration previously failed for this account. Use the admin panel to retry. ` +
+          `Error: ${masterAccount.copyFactoryLastError ?? "unknown"}`
+        : `CopyFactory provider not yet registered for this account (status: ${cfStatus}). ` +
+          `The automatic registration runs every 30 seconds — please wait, then try again. ` +
+          `If this persists, use the admin panel to trigger manual provider registration.`;
+    res.status(422).json({ error: errMsg });
+    return;
+  }
+
   let copyfactoryStrategyId: string | null = null;
 
-  const metaapiToken = await getMetaApiToken();
   if (metaapiToken && masterAccount.metaapiAccountId) {
+    // CopyFactory's TLS cert is expired — bypass for copyfactory-api-v1 only.
+    const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     try {
       const stratId = `strategy-${Date.now()}`;
       const response = await fetch(
@@ -95,10 +115,14 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
         copyfactoryStrategyId = stratId;
         logger.info({ stratId, masterAccountId }, "CopyFactory strategy created");
       } else {
-        logger.warn({ status: response.status, stratId }, "CopyFactory strategy creation returned non-OK");
+        const body = await response.text().catch(() => "");
+        logger.warn({ status: response.status, stratId, body }, "CopyFactory strategy creation returned non-OK");
       }
     } catch (err) {
       logger.warn({ err }, "CopyFactory strategy creation failed — storing locally only");
+    } finally {
+      if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
     }
   }
 

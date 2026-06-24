@@ -617,10 +617,26 @@ function MasterApprovalStatusBadge({ status }: { status?: string | null }) {
   }
 }
 
+function CfStateDot({ value, label }: { value: string | null | undefined; label: string }) {
+  const isOk = value && value.toUpperCase() !== "NONE" && value.toUpperCase() !== "FAILED" && value.toUpperCase() !== "ERROR";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-mono ${isOk ? "text-green-400" : value ? "text-amber-400" : "text-muted-foreground"}`}>
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
+
 function CopyFactoryDiagnosticsRow({ acc, token, onRetrySuccess }: {
   acc: {
     id?: number | null;
+    status?: string | null;
     metaapiAccountId?: string | null;
+    deploymentStatus?: string | null;
+    connectionStatus?: string | null;
+    synchronizationStatus?: string | null;
     copyFactoryProviderId?: string | null;
     copyFactoryProviderStatus?: string | null;
     copyFactoryProviderRegisteredAt?: string | null;
@@ -656,75 +672,145 @@ function CopyFactoryDiagnosticsRow({ acc, token, onRetrySuccess }: {
     }
   };
 
-  const status = acc.copyFactoryProviderStatus;
-  const isRegistered = status === "registered";
+  const cfStatus = acc.copyFactoryProviderStatus;
+  const isRegistered = cfStatus === "registered";
+
+  // Derive "why not in strategy dropdown" blockers
+  const blockers: string[] = [];
+  const liveStatuses = new Set(["deployed", "strategy_created", "active"]);
+  if (!liveStatuses.has(acc.status ?? "")) {
+    blockers.push(`Account status is "${acc.status ?? "unknown"}" — must be deployed, strategy_created, or active`);
+  }
+  if (!acc.metaapiAccountId) {
+    blockers.push("No MetaApi Account ID — account has not been deployed to MetaApi yet");
+  }
+  if (isRegistered === false && acc.metaapiAccountId) {
+    blockers.push(
+      cfStatus === "failed"
+        ? `CopyFactory provider registration failed — use "Create / Retry Provider" below`
+        : `CopyFactory provider not registered (status: ${cfStatus ?? "none"}) — auto-registration runs every 30s`
+    );
+  }
 
   return (
     <tr>
-      <td colSpan={6} className="pb-4 pt-1 pr-4">
-        <div className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-3">
-          <div className="flex items-center gap-2 mb-1">
+      <td colSpan={7} className="pb-4 pt-1 pr-4">
+        <div className="rounded-lg border border-border/50 bg-muted/10 p-4 space-y-4">
+
+          {/* Header */}
+          <div className="flex items-center gap-2">
             <Cpu className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-            <span className="text-xs font-semibold text-foreground">CopyFactory Provider Registration</span>
+            <span className="text-xs font-semibold text-foreground">CopyFactory Diagnostics</span>
             {isRegistered ? (
-              <Badge className="h-4 text-[10px] px-1.5 bg-green-500/15 text-green-400 border-green-500/20">Registered</Badge>
-            ) : status === "failed" ? (
-              <Badge className="h-4 text-[10px] px-1.5 bg-red-500/15 text-red-400 border-red-500/20">Failed</Badge>
+              <Badge className="h-4 text-[10px] px-1.5 bg-green-500/15 text-green-400 border-green-500/20">Provider Registered</Badge>
+            ) : cfStatus === "failed" ? (
+              <Badge className="h-4 text-[10px] px-1.5 bg-red-500/15 text-red-400 border-red-500/20">Registration Failed</Badge>
             ) : (
-              <Badge className="h-4 text-[10px] px-1.5 bg-muted/50 text-muted-foreground border-muted">Not Registered</Badge>
+              <Badge className="h-4 text-[10px] px-1.5 bg-amber-500/15 text-amber-400 border-amber-500/20">Provider Pending</Badge>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground">MetaApi Account ID</span>
-              <span className="font-mono text-foreground break-all">{acc.metaapiAccountId ?? "—"}</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground">CopyFactory Provider ID</span>
-              <span className="font-mono text-foreground break-all">{acc.copyFactoryProviderId ?? "—"}</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground">Provider Role Status</span>
-              <span className={isRegistered ? "text-green-400" : "text-muted-foreground"}>{status ?? "none"}</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground">Registration Timestamp</span>
-              <span className="text-foreground">
-                {acc.copyFactoryProviderRegisteredAt
-                  ? new Date(acc.copyFactoryProviderRegisteredAt).toLocaleString()
-                  : "—"}
-              </span>
+
+          {/* MetaApi infrastructure states */}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">MetaApi Infrastructure</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+              <CfStateDot value={acc.deploymentStatus} label="Deployment State" />
+              <CfStateDot value={acc.connectionStatus} label="Connection State" />
+              <CfStateDot value={acc.synchronizationStatus} label="Sync State" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground">Account Lifecycle</span>
+                <span className="font-mono text-foreground">{acc.status ?? "—"}</span>
+              </div>
             </div>
           </div>
-          {acc.copyFactoryLastError && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-muted-foreground">Last Error</span>
-              <p className="text-xs text-red-400 font-mono break-all">{acc.copyFactoryLastError}</p>
+
+          {/* CopyFactory provider state */}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">CopyFactory Provider</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground">MetaApi Account ID</span>
+                <span className="font-mono text-foreground break-all">{acc.metaapiAccountId ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground">CopyFactory Provider ID</span>
+                <span className="font-mono text-foreground break-all">{acc.copyFactoryProviderId ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground">Provider Creation Status</span>
+                <span className={isRegistered ? "text-green-400" : cfStatus === "failed" ? "text-red-400" : "text-amber-400"}>
+                  {cfStatus ?? "none"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground">Registered At</span>
+                <span className="text-foreground">
+                  {acc.copyFactoryProviderRegisteredAt
+                    ? new Date(acc.copyFactoryProviderRegisteredAt).toLocaleString()
+                    : "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Last API response & error */}
+          {(acc.copyFactoryLastError || acc.copyFactoryLastApiResponse) && (
+            <div className="space-y-2">
+              {acc.copyFactoryLastError && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Last Error</span>
+                  <p className="text-xs text-red-400 font-mono break-all">{acc.copyFactoryLastError}</p>
+                </div>
+              )}
+              {acc.copyFactoryLastApiResponse && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Last CopyFactory API Response</span>
+                  <p className="text-xs text-muted-foreground font-mono break-all line-clamp-3">{acc.copyFactoryLastApiResponse}</p>
+                </div>
+              )}
             </div>
           )}
-          {acc.copyFactoryLastApiResponse && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-muted-foreground">Last API Response</span>
-              <p className="text-xs text-muted-foreground font-mono break-all truncate max-h-10 overflow-hidden">{acc.copyFactoryLastApiResponse}</p>
-            </div>
-          )}
-          {retryMsg && (
-            <div className={`text-xs px-2 py-1 rounded ${retryMsg.ok ? "text-green-400 bg-green-500/10" : "text-red-400 bg-red-500/10"}`}>
-              {retryMsg.text}
-            </div>
-          )}
-          {acc.metaapiAccountId && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-              disabled={retrying}
-              onClick={() => void handleRetry()}
-            >
-              <RotateCcw className={`h-3 w-3 mr-1.5 ${retrying ? "animate-spin" : ""}`} />
-              {retrying ? "Retrying..." : "Retry Registration"}
-            </Button>
-          )}
+
+          {/* Strategy Readiness Report */}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Strategy Dropdown Readiness</p>
+            {blockers.length === 0 ? (
+              <div className="flex items-center gap-1.5 text-xs text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                Account is eligible for strategy creation
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {blockers.map((b, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {acc.metaapiAccountId && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                disabled={retrying}
+                onClick={() => void handleRetry()}
+              >
+                <RotateCcw className={`h-3 w-3 mr-1.5 ${retrying ? "animate-spin" : ""}`} />
+                {isRegistered ? "Re-register Provider" : retrying ? "Registering..." : "Create / Retry Provider"}
+              </Button>
+            )}
+            {retryMsg && (
+              <span className={`text-xs px-2 py-1 rounded ${retryMsg.ok ? "text-green-400 bg-green-500/10" : "text-red-400 bg-red-500/10"}`}>
+                {retryMsg.text}
+              </span>
+            )}
+          </div>
         </div>
       </td>
     </tr>

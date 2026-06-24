@@ -1,6 +1,6 @@
 ---
 name: CopyFactory API quirks
-description: Two critical MetaApi CopyFactory gotchas — wrong role field name and expired TLS cert workaround.
+description: Critical MetaApi CopyFactory gotchas — role field name, TLS cert, strategy creation guard, and provider registration flow.
 ---
 
 ## Rule 1: Role field name is `copyFactoryRoles`, not `roles`
@@ -43,3 +43,27 @@ try {
 **Why NOT undici Agent:** `undici@8.x` (installed by pnpm) requires Node.js 22+. We run Node.js 20.20.0. The `Agent` import crashes at runtime with `webidl.util.markAsUncloneable is not a function`.
 
 **How to apply:** This is already implemented in `callMetaApi()` in `artifacts/api-server/src/lib/metaapi.ts`. Do not remove it until MetaApi renews their cert.
+
+---
+
+## Rule 3: Strategy creation must be gated on copyFactoryProviderStatus === "registered"
+
+The `strategies.ts` route must check `masterAccount.copyFactoryProviderStatus !== "registered"` before allowing strategy creation when MetaApi is configured. Without this guard, CopyFactory returns "The account must be a MT account added to MetaApi for use with CopyFactory 2 (provider role)" even though the account status is `deployed`.
+
+**Why:** The internal account status (`deployed`, `active`) and CopyFactory provider registration are independent. An account can be `deployed` in our DB without being registered as a CopyFactory provider.
+
+**How to apply:** In `strategies.ts`, after the status check, add a provider guard. In demo mode (`!metaapiToken`) this is bypassed.
+
+---
+
+## Rule 4: Provider registration must be awaited, not fire-and-forget
+
+`ensureProviderRegistered` must be AWAITED in `advanceMasterAccount`. If it's fire-and-forget (`.catch()`), the account advances to `deployed` immediately and strategy creation can be attempted before provider registration completes.
+
+Also: `advanceMasterAccount` returns early when `newStatus === currentStatus` — so accounts ALREADY at `deployed` but with unregistered provider never retry. Add a retry block before the early return for accounts in `["deployed", "strategy_created", "active"]` with unregistered provider.
+
+---
+
+## Rule 5: CopyFactory raw fetch calls also need TLS bypass
+
+The raw `fetch()` call in `strategies.ts` for CopyFactory strategy creation also hits `copyfactory-api-v1.agiliumtrade.agiliumtrade.ai`. Apply the same `NODE_TLS_REJECT_UNAUTHORIZED = "0"` pattern with `finally` restore — NOT just in `callMetaApi`.
