@@ -6,7 +6,11 @@ import {
   useDeleteStrategy,
   useListMasterAccounts,
   getListStrategiesQueryKey,
+  type MasterAccount,
+  type Strategy,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,14 +18,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { GitBranch, Plus, Trash2, RefreshCw, AlertCircle, Server, Clock, Info, Tag, Link2 } from "lucide-react";
+import { GitBranch, Plus, Trash2, RefreshCw, AlertCircle, Server, Clock, Info, Tag, Link2, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-// Masters must be at least deployed before a strategy can be created
 const STRATEGY_ELIGIBLE_STATUSES = new Set(["deployed", "strategy_created", "active"]);
 
 export default function StrategiesPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+
   const { data: strategies, isLoading } = useListStrategies({
     query: { refetchInterval: 30_000 },
   });
@@ -33,8 +39,9 @@ export default function StrategiesPage() {
   const [form, setForm] = useState({ strategyName: "", masterAccountId: 0 });
   const [error, setError] = useState("");
 
-  const eligibleMasters = (masterAccounts ?? []).filter((m) => STRATEGY_ELIGIBLE_STATUSES.has(m.status ?? ""));
-  const hasPendingMasters = (masterAccounts ?? []).some((m) =>
+  const isAdmin = user?.role === "admin";
+  const eligibleMasters = (masterAccounts ?? []).filter((m: MasterAccount) => STRATEGY_ELIGIBLE_STATUSES.has(m.status ?? ""));
+  const hasPendingMasters = (masterAccounts ?? []).some((m: MasterAccount) =>
     ["pending_approval", "approved", "deploying", "connecting", "synchronizing"].includes(m.status ?? "")
   );
   const hasEligible = eligibleMasters.length > 0;
@@ -59,6 +66,103 @@ export default function StrategiesPage() {
     },
   });
 
+  // ── Subscriber view ───────────────────────────────────────────────────────
+  // Users who don't own any master account are subscribers — they don't create
+  // strategies themselves. Show them a clear explanation and a Bindings shortcut.
+  if (!isAdmin && !masterAccounts?.length && masterAccounts !== undefined) {
+    return (
+      <AppLayout>
+        <div className="p-6 space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Strategies</h1>
+            <p className="text-sm text-muted-foreground mt-1">CopyFactory strategies defining how trades are copied</p>
+          </div>
+
+          <Card className="border-blue-600/30 bg-blue-600/5">
+            <CardContent className="pt-5 pb-5 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
+                <Info className="h-4 w-4 shrink-0" />
+                How copy trading works on this platform
+              </div>
+              <ol className="space-y-3 pl-1">
+                {[
+                  {
+                    icon: Server,
+                    title: "The admin sets up the master account and strategy",
+                    detail: "The signal provider (master) and its CopyFactory strategy are configured by the admin. You do not need to create a strategy yourself.",
+                  },
+                  {
+                    icon: Users,
+                    title: "You connect your slave account via Bindings",
+                    detail: "Once a strategy is available, go to Bindings, select the strategy and your slave account, and set your risk multiplier. Copy trading starts immediately.",
+                  },
+                  {
+                    icon: Link2,
+                    title: "Trades copy automatically from master to your account",
+                    detail: "Every trade the master opens is replicated on your account in real time through CopyFactory — no manual action needed.",
+                  },
+                ].map(({ icon: Icon, title, detail }, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-blue-400 w-4 text-right">{i + 1}.</span>
+                      <Icon className="h-3.5 w-3.5 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-blue-300">{title}</p>
+                      <p className="text-xs text-blue-300/60 mt-0.5">{detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : strategies?.length ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Available strategies</p>
+              <div className="grid gap-3">
+                {strategies.map((s: Strategy) => (
+                  <Card key={s.id} className="border-border">
+                    <CardContent className="py-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-lg flex items-center justify-center bg-blue-600/10">
+                          <GitBranch className="h-4 w-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{s.strategyName}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Ready to bind</p>
+                        </div>
+                      </div>
+                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">{s.status ?? "active"}</Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Card className="border-yellow-500/30 bg-yellow-500/5">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-2 text-sm text-yellow-300">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <p>No strategies available yet. The admin is still setting up the signal provider. Check back soon.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Button onClick={() => navigate("/bindings")} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
+            <Link2 className="h-4 w-4 mr-2" /> Go to Bindings
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // ── Admin / master-owner view ─────────────────────────────────────────────
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
@@ -155,8 +259,8 @@ export default function StrategiesPage() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {strategies.map((s) => {
-              const master = masterAccounts?.find((m) => m.id === s.masterAccountId);
+            {strategies.map((s: Strategy) => {
+              const master = masterAccounts?.find((m: MasterAccount) => m.id === s.masterAccountId);
               const masterIsActive = master?.status === "active";
               return (
                 <Card key={s.id} className={`border-border transition-colors ${masterIsActive ? "hover:border-green-500/30" : "hover:border-blue-600/30"}`}>
@@ -179,7 +283,7 @@ export default function StrategiesPage() {
                           )}
                           {master && !masterIsActive && (
                             <p className="text-xs text-orange-400 mt-0.5">
-                              Master not active ({master.status}) — subscribers cannot bind
+                              Master not active ({master.status}) — subscribers cannot bind yet
                             </p>
                           )}
                         </div>
@@ -232,7 +336,7 @@ export default function StrategiesPage() {
                   onChange={(e) => setForm({ ...form, masterAccountId: parseInt(e.target.value) })}
                 >
                   <option value={0}>Select deployed master account...</option>
-                  {eligibleMasters.map((m) => (
+                  {eligibleMasters.map((m: MasterAccount) => (
                     <option key={m.id} value={m.id}>
                       {m.mt5Login} — {m.broker} ({m.status})
                     </option>
