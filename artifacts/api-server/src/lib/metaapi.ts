@@ -28,7 +28,6 @@ export function mapMetaApiState(state: string): string {
     case "ERROR":
       return "failed";
     default:
-      // "pending" — not yet submitted to MetaApi or unknown intermediate state
       return "pending";
   }
 }
@@ -62,7 +61,22 @@ export function invalidateMetaApiTokenCache(): void {
   cacheExpiry = 0;
 }
 
+// ── CopyFactory regional API base URL ─────────────────────────────────────────
+//
+// MetaApi's CopyFactory API is region-specific. Each MetaApi account has a
+// `region` field (e.g. "london", "vint-hill", "us-west"). The correct base URL
+// is constructed from that region.
+//
+// OLD (decommissioned, returns nginx 404): copyfactory-api-v1.agiliumtrade.agiliumtrade.ai
+// NEW (correct):                           copyfactory-api-v1.{region}.agiliumtrade.ai
+//
+export function getCopyFactoryApiBase(region: string): string {
+  return `https://copyfactory-api-v1.${region}.agiliumtrade.ai`;
+}
+
 // ── Audited HTTP helper ───────────────────────────────────────────────────────
+
+export const PROVISIONING_API = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
 
 export type MetaApiCallResult<T = unknown> = {
   ok: boolean;
@@ -98,12 +112,6 @@ export async function callMetaApi<T = unknown>(
   if (hasBody) headers["Content-Type"] = "application/json";
 
   let response: Response;
-  // CopyFactory's TLS cert is expired. We temporarily suppress TLS verification
-  // only for CopyFactory API calls. These calls are sequential within the poller,
-  // so the brief env-var swap is safe. The provisioning domain is unaffected.
-  const isCopyFactory = url.includes("copyfactory-api-v1");
-  const prevTlsReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  if (isCopyFactory) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   try {
     response = await fetch(url, {
       method,
@@ -116,11 +124,6 @@ export async function callMetaApi<T = unknown>(
       `MetaApi network error on ${method} ${url}`
     );
     throw fetchErr;
-  } finally {
-    if (isCopyFactory) {
-      if (prevTlsReject === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTlsReject;
-    }
   }
 
   let data: T;
@@ -146,28 +149,25 @@ export async function callMetaApi<T = unknown>(
   return { ok: response.ok, status: response.status, data };
 }
 
-// ── CopyFactory provider registration ────────────────────────────────────────
-
-const COPYFACTORY_API = "https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai";
-const PROVISIONING_API = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
-
-/**
- * Registers a master account as a CopyFactory signal provider.
- *
- * Two steps:
- *   1. PATCH the MetaApi provisioning account to add roles: ["provider"]
- *      (ensures the account is recognised by CopyFactory as a signal source)
- *   2. PUT the CopyFactory provider configuration entry
- *      (creates/updates the provider record CopyFactory uses for strategy linkage)
- *
- * Updates copyFactoryProvider* columns in master_accounts on every call so
- * the diagnostics page always reflects the latest attempt.
- */
-export async function registerMasterAsProvider(
+// ── CopyFactory provider role check ──────────────────────────────────────────
+//
+// In MetaApi V5 (cloud-g2), `copyFactoryRoles: ["PROVIDER"]` MUST be set in
+// the account creation POST body. It cannot be changed via PUT after creation
+// (MetaApi returns 400 ValidationError: "Unexpected value" for every attempt).
+//
+// There is no separate provider "registration" endpoint in the CopyFactory API.
+// An account with copyFactoryRoles:["PROVIDER"] is automatically a provider.
+// Strategy creation (PUT /configuration/strategies/{4-char-id}) is what links
+// the provider account to CopyFactory copy-trading.
+//
+// This function reads the current MetaApi account state and marks the DB record
+// as "registered" if the account was created with the correct role, or "failed"
+// with a clear re-creation instruction if the role is missing.
+//
+export async function checkAndMarkProviderRole(
   masterAccountId: number,
-  metaapiAccountId: string,
-  name: string
-): Promise<{ ok: boolean; providerId: string | null; error: string | null }> {
+  metaapiAccountId: string
+): Promise<{ ok: boolean; error: string | null }> {
   const token = await getMetaApiToken();
   if (!token) {
     const err = "MetaApi token not configured";
@@ -175,85 +175,48 @@ export async function registerMasterAsProvider(
       .update(masterAccountsTable)
       .set({ copyFactoryProviderStatus: "failed", copyFactoryLastError: err })
       .where(eq(masterAccountsTable.id, masterAccountId));
-    return { ok: false, providerId: null, error: err };
+    return { ok: false, error: err };
   }
 
-  // ── Step 1: Assign provider role on MetaApi provisioning account ───────────
-  // MetaApi uses "copyFactoryRoles" (not "roles") for CopyFactory role assignment.
-  try {
-    const roleResult = await callMetaApi(
-      "PUT",
-      `${PROVISIONING_API}/users/current/accounts/${metaapiAccountId}`,
-      token,
-      { copyFactoryRoles: ["PROVIDER"] }
-    );
-    if (!roleResult.ok) {
-      logger.warn(
-        { masterAccountId, metaapiAccountId, status: roleResult.status, body: roleResult.data },
-        "CopyFactory: setting provider role on MetaApi account returned non-OK (continuing to CF registration)"
-      );
-    } else {
-      logger.info(
-        { masterAccountId, metaapiAccountId },
-        "CopyFactory: provider role set on MetaApi provisioning account"
-      );
-    }
-  } catch (err) {
-    logger.warn({ err, masterAccountId }, "CopyFactory: error setting provider role on MetaApi account (continuing)");
+  const result = await callMetaApi<{ copyFactoryRoles?: string[] }>(
+    "GET",
+    `${PROVISIONING_API}/users/current/accounts/${metaapiAccountId}`,
+    token
+  );
+
+  if (!result.ok) {
+    const err = `MetaApi GET returned HTTP ${result.status}`;
+    await db
+      .update(masterAccountsTable)
+      .set({ copyFactoryProviderStatus: "failed", copyFactoryLastError: err })
+      .where(eq(masterAccountsTable.id, masterAccountId));
+    return { ok: false, error: err };
   }
 
-  // ── Step 2: Create/update CopyFactory provider configuration entry ─────────
-  const providerId = metaapiAccountId; // CF uses the MetaApi account ID as the provider ID
-  try {
-    const cfResult = await callMetaApi(
-      "PUT",
-      `${COPYFACTORY_API}/users/current/configuration/providers/${providerId}`,
-      token,
-      { name }
-    );
-
-    const ok = cfResult.ok || cfResult.status === 204;
-    const responseSnippet = JSON.stringify(cfResult.data).slice(0, 1000);
-
+  const roles: string[] = (result.data as { copyFactoryRoles?: string[] }).copyFactoryRoles ?? [];
+  if (roles.includes("PROVIDER")) {
     await db
       .update(masterAccountsTable)
       .set({
-        copyFactoryProviderId: ok ? providerId : null,
-        copyFactoryProviderStatus: ok ? "registered" : "failed",
-        copyFactoryProviderRegisteredAt: ok ? new Date() : null,
-        copyFactoryLastApiResponse: responseSnippet,
-        copyFactoryLastError: ok
-          ? null
-          : `CF provider PUT returned HTTP ${cfResult.status}: ${responseSnippet.slice(0, 300)}`,
+        copyFactoryProviderStatus: "registered",
+        copyFactoryLastError: null,
+        copyFactoryProviderRegisteredAt: new Date(),
       })
       .where(eq(masterAccountsTable.id, masterAccountId));
-
-    if (ok) {
-      logger.info(
-        { masterAccountId, metaapiAccountId, providerId },
-        "CopyFactory provider registered successfully"
-      );
-    } else {
-      logger.error(
-        { masterAccountId, metaapiAccountId, status: cfResult.status, body: cfResult.data },
-        "CopyFactory provider registration failed"
-      );
-    }
-
-    return { ok, providerId: ok ? providerId : null, error: ok ? null : `HTTP ${cfResult.status}` };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await db
-      .update(masterAccountsTable)
-      .set({
-        copyFactoryProviderStatus: "failed",
-        copyFactoryLastError: msg,
-        copyFactoryLastApiResponse: null,
-      })
-      .where(eq(masterAccountsTable.id, masterAccountId));
-    logger.error({ err, masterAccountId, metaapiAccountId }, "CopyFactory provider registration network error");
-    return { ok: false, providerId: null, error: msg };
+    logger.info({ masterAccountId, metaapiAccountId }, "CopyFactory provider role confirmed — marked as registered");
+    return { ok: true, error: null };
   }
+
+  const err =
+    'Account was created without copyFactoryRoles:["PROVIDER"]. ' +
+    "Delete this master account record, re-submit it, and re-approve it so a fresh " +
+    "MetaApi account is provisioned with the correct provider role.";
+  await db
+    .update(masterAccountsTable)
+    .set({ copyFactoryProviderStatus: "failed", copyFactoryLastError: err })
+    .where(eq(masterAccountsTable.id, masterAccountId));
+  logger.warn({ masterAccountId, metaapiAccountId, roles }, "CopyFactory provider role missing — account needs recreation");
+  return { ok: false, error: err };
 }
 
 // ── CopyFactory subscriber role check & auto-fix ─────────────────────────────
@@ -262,18 +225,8 @@ export async function registerMasterAsProvider(
  * Verifies that a slave account is registered as a CopyFactory subscriber and
  * auto-fixes the registration if it is missing.
  *
- * Steps:
- *   1. GET the subscriber record from CopyFactory. A 404 means it was never
- *      registered; any other non-OK status is treated as an unknown error.
- *   2. If the record is absent, ensure the MetaApi provisioning account has the
- *      "subscriber" role (PUT copyFactoryRoles: ["SUBSCRIBER"] on the provisioning API).
- *   3. PUT the subscriber configuration to CopyFactory (empty subscriptions list
- *      is fine — syncSlaveSubscriberToCopyFactory will fill it in afterwards).
- *   4. Persist the result in the slave_accounts diagnostic columns so the admin
- *      can see registration state without hitting the CopyFactory API.
- *
- * Returns `true` when the account is confirmed or newly registered, `false`
- * on any unrecoverable error.
+ * Uses the account's stored MetaApi region to construct the correct regional
+ * CopyFactory API base URL (e.g. copyfactory-api-v1.london.agiliumtrade.ai).
  */
 export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise<boolean> {
   const token = await getMetaApiToken();
@@ -293,18 +246,18 @@ export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise
   }
 
   const { metaapiAccountId } = slave;
+  const cfBase = getCopyFactoryApiBase(slave.metaapiRegion ?? "vint-hill");
 
   // ── Step 1: Check whether already registered in CopyFactory ────────────────
   let alreadyRegistered = false;
   try {
     const checkResult = await callMetaApi(
       "GET",
-      `${COPYFACTORY_API}/users/current/configuration/subscribers/${metaapiAccountId}`,
+      `${cfBase}/users/current/configuration/subscribers/${metaapiAccountId}`,
       token
     );
 
     if (checkResult.ok) {
-      // Already registered — refresh diagnostic columns and return early
       alreadyRegistered = true;
       logger.info(
         { slaveAccountId, metaapiAccountId },
@@ -323,20 +276,21 @@ export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise
     }
 
     if (checkResult.status !== 404) {
-      // Unexpected error from CopyFactory — log and continue to attempt registration
       logger.warn(
         { slaveAccountId, metaapiAccountId, status: checkResult.status, body: checkResult.data },
         "CopyFactory subscriber GET returned unexpected status — will attempt registration anyway"
       );
     }
-    // 404 → not registered yet; fall through to registration steps
   } catch (err) {
     logger.warn({ err, slaveAccountId }, "CopyFactory subscriber GET failed — will attempt registration");
   }
 
   if (alreadyRegistered) return true;
 
-  // ── Step 2: Assign subscriber role on MetaApi provisioning account ──────────
+  // ── Step 2: Assign SUBSCRIBER role on MetaApi provisioning account ──────────
+  // Note: copyFactoryRoles:["SUBSCRIBER"] should ideally be set at account
+  // creation time (same as PROVIDER). The PUT attempt is kept here for
+  // backward-compatibility with slave accounts that pre-date this requirement.
   try {
     const roleResult = await callMetaApi(
       "PUT",
@@ -347,20 +301,20 @@ export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise
     if (!roleResult.ok) {
       logger.warn(
         { slaveAccountId, metaapiAccountId, status: roleResult.status, body: roleResult.data },
-        "CopyFactory: setting subscriber role returned non-OK (continuing to CF registration)"
+        "CopyFactory: setting SUBSCRIBER role returned non-OK (continuing to CF registration)"
       );
     } else {
-      logger.info({ slaveAccountId, metaapiAccountId }, "CopyFactory: subscriber role set on MetaApi provisioning account");
+      logger.info({ slaveAccountId, metaapiAccountId }, "CopyFactory: SUBSCRIBER role set on MetaApi provisioning account");
     }
   } catch (err) {
-    logger.warn({ err, slaveAccountId }, "CopyFactory: error setting subscriber role (continuing)");
+    logger.warn({ err, slaveAccountId }, "CopyFactory: error setting SUBSCRIBER role (continuing)");
   }
 
   // ── Step 3: Register subscriber configuration in CopyFactory ────────────────
   try {
     const regResult = await callMetaApi(
       "PUT",
-      `${COPYFACTORY_API}/users/current/configuration/subscribers/${metaapiAccountId}`,
+      `${cfBase}/users/current/configuration/subscribers/${metaapiAccountId}`,
       token,
       { subscriptions: [] }
     );
@@ -382,10 +336,7 @@ export async function ensureSlaveSubscriberRole(slaveAccountId: number): Promise
       .where(eq(slaveAccountsTable.id, slaveAccountId));
 
     if (ok) {
-      logger.info(
-        { slaveAccountId, metaapiAccountId },
-        "CopyFactory subscriber registered successfully (auto-fixed)"
-      );
+      logger.info({ slaveAccountId, metaapiAccountId }, "CopyFactory subscriber registered successfully (auto-fixed)");
     } else {
       logger.error(
         { slaveAccountId, metaapiAccountId, status: regResult.status, body: regResult.data },
@@ -432,6 +383,8 @@ export async function syncSlaveSubscriberToCopyFactory(slaveAccountId: number): 
     return;
   }
 
+  const cfBase = getCopyFactoryApiBase(slave.metaapiRegion ?? "vint-hill");
+
   const activeBindings = await db
     .select()
     .from(bindingsTable)
@@ -455,7 +408,7 @@ export async function syncSlaveSubscriberToCopyFactory(slaveAccountId: number): 
   try {
     const result = await callMetaApi(
       "PUT",
-      `${COPYFACTORY_API}/users/current/configuration/subscribers/${slave.metaapiAccountId}`,
+      `${cfBase}/users/current/configuration/subscribers/${slave.metaapiAccountId}`,
       token,
       { subscriptions }
     );

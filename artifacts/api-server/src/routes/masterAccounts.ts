@@ -64,6 +64,7 @@ export async function deployMasterToMetaApi(params: {
   deploymentStatus: string | null;
   lastErrorMessage: string | null;
   metaapiRegion: string | null;
+  copyFactoryProviderStatus: string | null;
 }> {
   const metaapiToken = await getMetaApiToken();
   if (!metaapiToken) {
@@ -74,6 +75,7 @@ export async function deployMasterToMetaApi(params: {
       deploymentStatus: null,
       lastErrorMessage: "MetaApi token is not configured. Configure it in Admin → Settings.",
       metaapiRegion: null,
+      copyFactoryProviderStatus: null,
     };
   }
 
