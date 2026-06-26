@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
+import { repairStrategyCopyFactoryIds } from "./lib/copyfactorySync";
 import { startAccountPoller } from "./lib/accountPoller";
 import { startReconnectWorker } from "./lib/reconnectWorker";
 import { seedDefaultAccounts, seedReferralSettings } from "./lib/seed";
@@ -121,6 +122,9 @@ if (process.env.NODE_ENV === "production") {
 
 // Seed default accounts on first run
 void seedDefaultAccounts();
+// Repair any strategies that were saved without a CopyFactory strategy ID
+// (happens if strategy creation succeeded in our DB but CopyFactory registration failed)
+void repairStrategyCopyFactoryIds();
 
 // Start the subscription expiry scheduler
 startScheduler();

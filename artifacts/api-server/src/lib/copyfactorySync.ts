@@ -1,9 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { db, strategiesTable, masterAccountsTable, usersTable } from "@workspace/db";
-import { getMetaApiToken, callMetaApi } from "./metaapi";
+import { getMetaApiToken, callMetaApi, getCopyFactoryApiBase } from "./metaapi";
 import { logger } from "./logger";
-
-const COPYFACTORY_API = "https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai";
 
 export type CopyFactoryStrategyRecord = {
   _id: string;
@@ -43,16 +41,24 @@ export async function fetchCopyFactoryStrategies(): Promise<CopyFactoryStrategyR
     return [];
   }
 
+  // Use the first master account's region to construct the correct regional URL.
+  // The old global URL (copyfactory-api-v1.agiliumtrade.agiliumtrade.ai) is decommissioned.
+  const [firstMaster] = await db
+    .select({ metaapiRegion: masterAccountsTable.metaapiRegion })
+    .from(masterAccountsTable)
+    .limit(1);
+  const cfBase = getCopyFactoryApiBase(firstMaster?.metaapiRegion ?? "vint-hill");
+
   const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   try {
     const result = await callMetaApi<CopyFactoryStrategyRecord[]>(
       "GET",
-      `${COPYFACTORY_API}/users/current/configuration/strategies`,
+      `${cfBase}/users/current/configuration/strategies`,
       token
     );
     if (!result.ok) {
-      logger.warn({ status: result.status, body: result.data }, "CopyFactory GET strategies returned non-OK");
+      logger.warn({ status: result.status, body: result.data, cfBase }, "CopyFactory GET strategies returned non-OK");
       return [];
     }
     const data = result.data;
@@ -63,6 +69,72 @@ export async function fetchCopyFactoryStrategies(): Promise<CopyFactoryStrategyR
   } finally {
     if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
+  }
+}
+
+/**
+ * Repair: finds strategies in the DB that have no copyfactoryStrategyId and
+ * attempts to register them in CopyFactory using the master account's region.
+ * Called at server startup and from admin sync triggers.
+ */
+export async function repairStrategyCopyFactoryIds(): Promise<void> {
+  const token = await getMetaApiToken();
+  if (!token) return;
+
+  const broken = await db
+    .select()
+    .from(strategiesTable)
+    .where(isNull(strategiesTable.copyfactoryStrategyId));
+
+  if (broken.length === 0) return;
+
+  logger.info({ count: broken.length }, "Repairing strategies with missing CopyFactory IDs");
+
+  for (const strategy of broken) {
+    const [master] = await db
+      .select()
+      .from(masterAccountsTable)
+      .where(eq(masterAccountsTable.id, strategy.masterAccountId));
+
+    if (!master?.metaapiAccountId) {
+      logger.warn({ strategyId: strategy.id }, "Cannot repair strategy — master has no MetaApi account ID");
+      continue;
+    }
+
+    const cfBase = getCopyFactoryApiBase(master.metaapiRegion ?? "vint-hill");
+    const stratId = `strategy-${Date.now()}`;
+
+    const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    try {
+      const response = await fetch(
+        `${cfBase}/users/current/configuration/strategies/${stratId}`,
+        {
+          method: "PUT",
+          headers: { "auth-token": token, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: strategy.strategyName,
+            positionLifecycle: "hedging",
+            connectionId: master.metaapiAccountId,
+          }),
+        }
+      );
+      if (response.ok) {
+        await db
+          .update(strategiesTable)
+          .set({ copyfactoryStrategyId: stratId })
+          .where(eq(strategiesTable.id, strategy.id));
+        logger.info({ strategyId: strategy.id, stratId, cfBase }, "Strategy CopyFactory ID repaired");
+      } else {
+        const body = await response.text().catch(() => "");
+        logger.warn({ strategyId: strategy.id, status: response.status, body, cfBase }, "Strategy CopyFactory repair failed");
+      }
+    } catch (err) {
+      logger.warn({ err, strategyId: strategy.id }, "Strategy CopyFactory repair network error");
+    } finally {
+      if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
+    }
   }
 }
 

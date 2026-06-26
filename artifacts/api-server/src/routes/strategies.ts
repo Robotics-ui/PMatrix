@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db, strategiesTable, masterAccountsTable, bindingsTable, slaveAccountsTable } from "@workspace/db";
 import { CreateStrategyBody, DeleteStrategyParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
-import { getMetaApiToken, syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
+import { getMetaApiToken, getCopyFactoryApiBase, syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
 import { writeAuditLog } from "../lib/accountPoller";
 import { logger } from "../lib/logger";
 
@@ -122,13 +122,16 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
   let copyfactoryStrategyId: string | null = null;
 
   if (metaapiToken && masterAccount.metaapiAccountId) {
-    // CopyFactory's TLS cert is expired — bypass for copyfactory-api-v1 only.
+    // Use the region-specific CopyFactory endpoint.
+    // The old global URL (copyfactory-api-v1.agiliumtrade.agiliumtrade.ai) was
+    // decommissioned and returns nginx 404. Correct form: copyfactory-api-v1.{region}.agiliumtrade.ai
+    const cfBase = getCopyFactoryApiBase(masterAccount.metaapiRegion ?? "vint-hill");
     const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     try {
       const stratId = `strategy-${Date.now()}`;
       const response = await fetch(
-        `https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai/users/current/configuration/strategies/${stratId}`,
+        `${cfBase}/users/current/configuration/strategies/${stratId}`,
         {
           method: "PUT",
           headers: {
@@ -144,10 +147,10 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
       );
       if (response.ok) {
         copyfactoryStrategyId = stratId;
-        logger.info({ stratId, masterAccountId }, "CopyFactory strategy created");
+        logger.info({ stratId, masterAccountId, cfBase }, "CopyFactory strategy created");
       } else {
         const body = await response.text().catch(() => "");
-        logger.warn({ status: response.status, stratId, body }, "CopyFactory strategy creation returned non-OK");
+        logger.warn({ status: response.status, stratId, body, cfBase }, "CopyFactory strategy creation returned non-OK");
       }
     } catch (err) {
       logger.warn({ err }, "CopyFactory strategy creation failed — storing locally only");
@@ -211,7 +214,7 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
     .from(bindingsTable)
     .where(eq(bindingsTable.strategyId, strategy.id));
 
-  const affectedSlaveIds = [...new Set(affectedBindings.map((b) => b.slaveAccountId))];
+  const affectedSlaveIds = [...new Set(affectedBindings.map((b: { slaveAccountId: number }) => b.slaveAccountId))] as number[];
 
   await db.delete(bindingsTable).where(eq(bindingsTable.strategyId, strategy.id));
 
@@ -221,15 +224,20 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
 
   const metaapiToken = await getMetaApiToken();
   if (metaapiToken && strategy.copyfactoryStrategyId) {
+    const [stratMaster] = await db
+      .select({ metaapiRegion: masterAccountsTable.metaapiRegion })
+      .from(masterAccountsTable)
+      .where(eq(masterAccountsTable.id, strategy.masterAccountId));
+    const cfBase = getCopyFactoryApiBase(stratMaster?.metaapiRegion ?? "vint-hill");
     fetch(
-      `https://copyfactory-api-v1.agiliumtrade.agiliumtrade.ai/users/current/configuration/strategies/${strategy.copyfactoryStrategyId}`,
+      `${cfBase}/users/current/configuration/strategies/${strategy.copyfactoryStrategyId}`,
       { method: "DELETE", headers: { "auth-token": metaapiToken } }
     ).catch((err) => {
       logger.warn({ err, copyfactoryStrategyId: strategy.copyfactoryStrategyId }, "CopyFactory strategy delete failed");
     });
   }
 
-  for (const slaveId of affectedSlaveIds) {
+  for (const slaveId of affectedSlaveIds as number[]) {
     const [slave] = await db.select({ id: slaveAccountsTable.id }).from(slaveAccountsTable).where(eq(slaveAccountsTable.id, slaveId));
     if (slave) {
       await syncSlaveSubscriberToCopyFactory(slaveId).catch((err) => {
