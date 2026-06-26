@@ -22,8 +22,12 @@ const STRATEGY_ELIGIBLE_STATUSES = new Set(["deployed", "strategy_created", "act
 
 export default function StrategiesPage() {
   const qc = useQueryClient();
-  const { data: strategies, isLoading } = useListStrategies();
-  const { data: masterAccounts } = useListMasterAccounts();
+  const { data: strategies, isLoading } = useListStrategies({
+    query: { refetchInterval: 30_000 },
+  });
+  const { data: masterAccounts } = useListMasterAccounts({
+    query: { refetchInterval: 30_000 },
+  });
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({ strategyName: "", masterAccountId: 0 });

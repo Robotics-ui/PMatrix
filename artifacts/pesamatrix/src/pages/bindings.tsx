@@ -21,13 +21,21 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export default function BindingsPage() {
   const qc = useQueryClient();
-  const { data: bindings, isLoading } = useListBindings();
+  const { data: bindings, isLoading } = useListBindings({
+    query: { refetchInterval: 30_000 },
+  });
   // Available strategies = all platform strategies whose master is CONNECTED+DEPLOYED
   // (server-filtered, no client-side ownership restriction)
-  const { data: availableStrategies } = useListAvailableStrategies();
+  const { data: availableStrategies } = useListAvailableStrategies({
+    query: { refetchInterval: 30_000 },
+  });
   // Own strategies list is kept for display lookups in the bindings list
-  const { data: ownStrategies } = useListStrategies();
-  const { data: slaveAccounts } = useListSlaveAccounts();
+  const { data: ownStrategies } = useListStrategies({
+    query: { refetchInterval: 30_000 },
+  });
+  const { data: slaveAccounts } = useListSlaveAccounts({
+    query: { refetchInterval: 30_000 },
+  });
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({ strategyId: 0, slaveAccountId: 0, riskMultiplier: 1.0 });
