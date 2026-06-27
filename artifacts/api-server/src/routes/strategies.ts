@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db, strategiesTable, masterAccountsTable, bindingsTable, slaveAccountsTable } from "@workspace/db";
 import { CreateStrategyBody, DeleteStrategyParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
-import { getMetaApiToken, getCopyFactoryApiBase, syncSlaveSubscriberToCopyFactory } from "../lib/metaapi";
+import { getMetaApiToken, getCopyFactoryApiBase, syncSlaveSubscriberToCopyFactory, copyfactoryFetch } from "../lib/metaapi";
 import { writeAuditLog } from "../lib/accountPoller";
 import { logger } from "../lib/logger";
 
@@ -126,8 +126,6 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
     // The old global URL (copyfactory-api-v1.agiliumtrade.agiliumtrade.ai) was
     // decommissioned and returns nginx 404. Correct form: copyfactory-api-v1.{region}.agiliumtrade.ai
     const cfBase = getCopyFactoryApiBase(masterAccount.metaapiRegion ?? "vint-hill");
-    const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     // CopyFactory strategy IDs must be exactly 4 alphanumeric characters (a-z, 0-9).
     // Longer IDs or those with hyphens are rejected with HTTP 400 ValidationError.
     // The 36^4 = 1.68M ID space is small, so we retry up to 15 times on conflict.
@@ -138,19 +136,14 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
       let lastError = "";
       for (let attempt = 0; attempt < 15 && !registered; attempt++) {
         const stratId = genStratId();
-        const response = await fetch(
+        const response = await copyfactoryFetch(
+          "PUT",
           `${cfBase}/users/current/configuration/strategies/${stratId}`,
+          metaapiToken,
           {
-            method: "PUT",
-            headers: {
-              "auth-token": metaapiToken,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              name: strategyName,
-              description: strategyName,
-              accountId: masterAccount.metaapiAccountId,
-            }),
+            name: strategyName,
+            description: strategyName,
+            accountId: masterAccount.metaapiAccountId,
           }
         );
         if (response.ok) {
@@ -158,7 +151,7 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
           registered = true;
           logger.info({ stratId, masterAccountId, cfBase, attempt }, "CopyFactory strategy created");
         } else {
-          const body = await response.text().catch(() => "");
+          const body = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
           lastError = `HTTP ${response.status}: ${body}`;
           // Retry only on conflict (409) or validation errors that look like ID collisions.
           // Any other error (auth, not-found, etc.) will break out after logging.
@@ -175,9 +168,6 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
       }
     } catch (err) {
       logger.warn({ err }, "CopyFactory strategy creation failed — storing locally only");
-    } finally {
-      if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
     }
   }
 
@@ -250,9 +240,10 @@ router.delete("/strategies/:id", authenticate, async (req, res): Promise<void> =
       .from(masterAccountsTable)
       .where(eq(masterAccountsTable.id, strategy.masterAccountId));
     const cfBase = getCopyFactoryApiBase(stratMaster?.metaapiRegion ?? "vint-hill");
-    fetch(
+    copyfactoryFetch(
+      "DELETE",
       `${cfBase}/users/current/configuration/strategies/${strategy.copyfactoryStrategyId}`,
-      { method: "DELETE", headers: { "auth-token": metaapiToken } }
+      metaapiToken
     ).catch((err) => {
       logger.warn({ err, copyfactoryStrategyId: strategy.copyfactoryStrategyId }, "CopyFactory strategy delete failed");
     });

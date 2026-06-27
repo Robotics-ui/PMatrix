@@ -1,6 +1,69 @@
+import https from "node:https";
 import { db, adminSettingsTable, bindingsTable, strategiesTable, slaveAccountsTable, masterAccountsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
+
+// ── CopyFactory TLS agent ─────────────────────────────────────────────────────
+//
+// MetaApi's CopyFactory regional domains (copyfactory-api-v1.*.agiliumtrade.ai)
+// have an expired TLS certificate. Rather than toggling the process-global
+// NODE_TLS_REJECT_UNAUTHORIZED env var (which leaks into concurrent requests),
+// we use a dedicated https.Agent with rejectUnauthorized:false that is scoped
+// only to CopyFactory calls. This agent is reused across requests for efficiency.
+//
+const CF_AGENT = new https.Agent({ rejectUnauthorized: false });
+
+/**
+ * Make an HTTPS request to a CopyFactory endpoint using the shared CF_AGENT
+ * (which bypasses cert verification for MetaApi's expired cert). Returns the
+ * same MetaApiCallResult shape as callMetaApi so callers can use either.
+ */
+export async function copyfactoryFetch<T = unknown>(
+  method: string,
+  url: string,
+  token: string,
+  body?: unknown
+): Promise<MetaApiCallResult<T>> {
+  const hasBody = body != null;
+  const headers: Record<string, string> = { "auth-token": token };
+  if (hasBody) headers["Content-Type"] = "application/json";
+  const bodyStr = hasBody ? JSON.stringify(body) : undefined;
+
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: u.port ? parseInt(u.port, 10) : 443,
+        path: u.pathname + u.search,
+        method,
+        headers,
+        agent: CF_AGENT,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const rawText = Buffer.concat(chunks).toString("utf8");
+          let data: T;
+          try { data = JSON.parse(rawText) as T; } catch { data = rawText as unknown as T; }
+          const status = res.statusCode ?? 0;
+          const ok = status >= 200 && status < 300;
+          logger.info(
+            { metaApiAudit: "response", method, url, httpStatus: status, ok, responseBody: data },
+            `CopyFactory ← ${status} ${method} ${url}`
+          );
+          resolve({ ok, status, data });
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    logger.info({ metaApiAudit: "request", method, url, body: hasBody ? body : undefined }, `CopyFactory → ${method} ${url}`);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
 
 /**
  * Maps a raw MetaApi state string to a PESAMATRIX internal status string.
@@ -110,6 +173,12 @@ export async function callMetaApi<T = unknown>(
 
   const headers: Record<string, string> = { "auth-token": token };
   if (hasBody) headers["Content-Type"] = "application/json";
+
+  // CopyFactory regional domains have an expired TLS cert — route through copyfactoryFetch
+  // which uses a dedicated https.Agent, keeping TLS bypass scoped to those calls only.
+  if (url.includes("copyfactory-api-v1")) {
+    return copyfactoryFetch<T>(method, url, token, body);
+  }
 
   let response: Response;
   try {
@@ -381,6 +450,18 @@ export async function syncSlaveSubscriberToCopyFactory(slaveAccountId: number): 
   if (!slave?.metaapiAccountId) {
     logger.debug({ slaveAccountId }, "Slave account has no MetaApi account ID — skipping CopyFactory sync");
     return;
+  }
+
+  // If the subscriber was never registered in CopyFactory (e.g. the scheduler is calling this
+  // on subscription expiry/renewal and the account missed initial registration), auto-register
+  // now. ensureSlaveSubscriberRole is idempotent and will no-op if already registered.
+  if (!slave.copyFactorySubscriberId) {
+    logger.info({ slaveAccountId }, "CopyFactory sync: subscriber not registered — attempting registration first");
+    const registered = await ensureSlaveSubscriberRole(slaveAccountId);
+    if (!registered) {
+      logger.warn({ slaveAccountId }, "CopyFactory sync: subscriber registration failed — skipping subscription push");
+      return;
+    }
   }
 
   const cfBase = getCopyFactoryApiBase(slave.metaapiRegion ?? "vint-hill");

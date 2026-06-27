@@ -1,6 +1,6 @@
 import { eq, isNull } from "drizzle-orm";
 import { db, strategiesTable, masterAccountsTable, usersTable } from "@workspace/db";
-import { getMetaApiToken, callMetaApi, getCopyFactoryApiBase } from "./metaapi";
+import { getMetaApiToken, callMetaApi, getCopyFactoryApiBase, copyfactoryFetch } from "./metaapi";
 import { logger } from "./logger";
 
 export type CopyFactoryStrategyRecord = {
@@ -47,10 +47,16 @@ export async function fetchCopyFactoryStrategies(): Promise<CopyFactoryStrategyR
     .select({ metaapiRegion: masterAccountsTable.metaapiRegion })
     .from(masterAccountsTable)
     .limit(1);
-  const cfBase = getCopyFactoryApiBase(firstMaster?.metaapiRegion ?? "vint-hill");
 
-  const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  if (!firstMaster) {
+    // No master accounts in the DB yet — skip entirely rather than falling back to "vint-hill"
+    // (which would cause ENOTFOUND DNS errors in dev where the region server is unreachable).
+    logger.debug("No master accounts in DB — skipping CopyFactory strategy fetch");
+    return [];
+  }
+
+  const cfBase = getCopyFactoryApiBase(firstMaster.metaapiRegion ?? "vint-hill");
+
   try {
     const result = await callMetaApi<CopyFactoryStrategyRecord[]>(
       "GET",
@@ -66,9 +72,6 @@ export async function fetchCopyFactoryStrategies(): Promise<CopyFactoryStrategyR
   } catch (err) {
     logger.error({ err }, "CopyFactory strategy fetch network error");
     return [];
-  } finally {
-    if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
   }
 }
 
@@ -125,24 +128,20 @@ export async function repairStrategyCopyFactoryIds(): Promise<RepairReport> {
     }
 
     const cfBase = getCopyFactoryApiBase(master.metaapiRegion ?? "vint-hill");
-    const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     let repaired = false;
     let lastError = "";
 
     try {
       for (let attempt = 0; attempt < 15 && !repaired; attempt++) {
         const stratId = genStratId();
-        const response = await fetch(
+        const response = await copyfactoryFetch(
+          "PUT",
           `${cfBase}/users/current/configuration/strategies/${stratId}`,
+          token,
           {
-            method: "PUT",
-            headers: { "auth-token": token, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: strategy.strategyName,
-              description: strategy.strategyName,
-              accountId: master.metaapiAccountId,
-            }),
+            name: strategy.strategyName,
+            description: strategy.strategyName,
+            accountId: master.metaapiAccountId,
           }
         );
         if (response.ok) {
@@ -153,7 +152,7 @@ export async function repairStrategyCopyFactoryIds(): Promise<RepairReport> {
           logger.info({ strategyId: strategy.id, stratId, cfBase, attempt }, "Strategy CopyFactory ID repaired");
           repaired = true;
         } else {
-          const body = await response.text().catch(() => "");
+          const body = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
           lastError = `HTTP ${response.status}: ${body}`;
           const isConflict = response.status === 409 || (response.status === 400 && body.includes("already exists"));
           if (!isConflict) {
@@ -166,9 +165,6 @@ export async function repairStrategyCopyFactoryIds(): Promise<RepairReport> {
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       logger.warn({ err, strategyId: strategy.id }, "Strategy CopyFactory repair network error");
-    } finally {
-      if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
     }
 
     if (repaired) {

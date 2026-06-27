@@ -1,6 +1,6 @@
-import { inArray, isNotNull, and, eq } from "drizzle-orm";
+import { inArray, isNotNull, isNull, and, eq } from "drizzle-orm";
 import { db, masterAccountsTable, slaveAccountsTable, strategiesTable, masterAccountAuditLogsTable } from "@workspace/db";
-import { getMetaApiToken, callMetaApi, mapMetaApiState, checkAndMarkProviderRole } from "./metaapi";
+import { getMetaApiToken, callMetaApi, mapMetaApiState, checkAndMarkProviderRole, ensureSlaveSubscriberRole } from "./metaapi";
 import { logger } from "./logger";
 
 const PROVISIONING_API = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
@@ -19,6 +19,10 @@ let pollerRunning = false;
 let monitorRunning = false;
 let pollCount = 0;
 let monitorCount = 0;
+
+// Tracks slave IDs currently undergoing CopyFactory subscriber registration to prevent
+// duplicate concurrent attempts across poller ticks.
+const cfRegistrationInProgress = new Set<number>();
 
 type MetaApiAccountResponse = {
   state?: string;
@@ -250,12 +254,13 @@ async function monitorMasterAccount(
   }
 }
 
-// ── Slave account polling (unchanged) ────────────────────────────────────────
+// ── Slave account polling ─────────────────────────────────────────────────────
 
 async function checkSingleSlaveAccount(
   id: number,
   metaapiAccountId: string,
-  token: string
+  token: string,
+  copyFactorySubscriberId: string | null
 ): Promise<void> {
   try {
     const result = await callMetaApi<MetaApiAccountResponse>(
@@ -285,6 +290,15 @@ async function checkSingleSlaveAccount(
       { id, metaapiAccountId, state: data.state, connectionStatus: data.connectionStatus, newStatus },
       "Slave account polled"
     );
+
+    // Auto-register as CopyFactory subscriber the first time the account becomes connected.
+    if (newStatus === "connected" && !copyFactorySubscriberId && !cfRegistrationInProgress.has(id)) {
+      cfRegistrationInProgress.add(id);
+      logger.info({ id, metaapiAccountId }, "Slave reached connected — triggering CopyFactory subscriber registration");
+      ensureSlaveSubscriberRole(id)
+        .catch((err) => logger.warn({ id, metaapiAccountId, err }, "Auto CopyFactory subscriber registration failed during poll"))
+        .finally(() => cfRegistrationInProgress.delete(id));
+    }
   } catch (err) {
     logger.warn({ id, metaapiAccountId, err }, "Failed to poll slave account");
   }
@@ -322,7 +336,11 @@ async function runPollerTick(): Promise<void> {
           )
         ),
       db
-        .select({ id: slaveAccountsTable.id, metaapiAccountId: slaveAccountsTable.metaapiAccountId })
+        .select({
+          id: slaveAccountsTable.id,
+          metaapiAccountId: slaveAccountsTable.metaapiAccountId,
+          copyFactorySubscriberId: slaveAccountsTable.copyFactorySubscriberId,
+        })
         .from(slaveAccountsTable)
         .where(
           and(
@@ -332,12 +350,24 @@ async function runPollerTick(): Promise<void> {
         ),
     ]);
 
-    const total = masters.length + slaves.length;
+    // Also pick up any already-connected slaves that never got a CopyFactory subscriber registration.
+    const unregisteredConnected = await db
+      .select({ id: slaveAccountsTable.id })
+      .from(slaveAccountsTable)
+      .where(
+        and(
+          eq(slaveAccountsTable.status, "connected"),
+          isNull(slaveAccountsTable.copyFactorySubscriberId),
+          isNotNull(slaveAccountsTable.metaapiAccountId)
+        )
+      );
+
+    const total = masters.length + slaves.length + unregisteredConnected.length;
     if (total === 0) return;
 
     pollCount++;
     logger.info(
-      { poll: pollCount, masters: masters.length, slaves: slaves.length },
+      { poll: pollCount, masters: masters.length, slaves: slaves.length, unregisteredConnected: unregisteredConnected.length },
       "Account poller tick started"
     );
 
@@ -362,8 +392,19 @@ async function runPollerTick(): Promise<void> {
     for (let i = 0; i < slaves.length; i += CONCURRENCY) {
       const chunk = slaves.slice(i, i + CONCURRENCY);
       await Promise.allSettled(
-        chunk.map((a) => checkSingleSlaveAccount(a.id, a.metaapiAccountId!, token))
+        chunk.map((a) => checkSingleSlaveAccount(a.id, a.metaapiAccountId!, token, a.copyFactorySubscriberId ?? null))
       );
+    }
+
+    // Fire-and-forget CopyFactory registration for slaves that are connected but unregistered.
+    // The in-progress set prevents duplicate concurrent attempts across ticks.
+    for (const slave of unregisteredConnected) {
+      if (cfRegistrationInProgress.has(slave.id)) continue;
+      cfRegistrationInProgress.add(slave.id);
+      logger.info({ slaveId: slave.id }, "Auto-repair: connected slave missing CopyFactory subscriber registration");
+      ensureSlaveSubscriberRole(slave.id)
+        .catch((err) => logger.warn({ slaveId: slave.id, err }, "Auto-repair CopyFactory subscriber registration failed"))
+        .finally(() => cfRegistrationInProgress.delete(slave.id));
     }
 
     logger.info(

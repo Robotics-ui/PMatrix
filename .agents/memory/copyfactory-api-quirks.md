@@ -20,29 +20,19 @@ Do NOT use `{ "roles": [...] }` — MetaApi returns HTTP 400 "Unexpected value" 
 
 ---
 
-## Rule 2: CopyFactory domain has an expired TLS cert
+## Rule 2: CopyFactory domain has an expired TLS cert — use copyfactoryFetch
 
-`copyfactory-api-v1.agiliumtrade.agiliumtrade.ai` has an expired TLS certificate. All `fetch()` calls to this domain throw `certificate has expired`.
+`copyfactory-api-v1.*.agiliumtrade.ai` regional domains have an expired TLS certificate. All `fetch()` calls to these domains throw `certificate has expired`.
 
-**Fix:** Temporarily set `process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"` scoped to the CopyFactory fetch call, then restore the previous value in a `finally` block. This is safe because CopyFactory calls are sequential (account poller), not concurrent.
+**Fix (current):** Use the `copyfactoryFetch(method, url, token, body?)` helper exported from `metaapi.ts`. It uses a persistent `https.Agent({ rejectUnauthorized: false })` (named `CF_AGENT`) scoped to CopyFactory calls only — no process-global env var toggling.
 
-```typescript
-const isCopyFactory = url.includes("copyfactory-api-v1");
-const prevTlsReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-if (isCopyFactory) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-try {
-  response = await fetch(url, { ... });
-} finally {
-  if (isCopyFactory) {
-    if (prevTlsReject === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTlsReject;
-  }
-}
-```
+- `callMetaApi` automatically routes any URL containing `copyfactory-api-v1` through `copyfactoryFetch` internally.
+- All direct raw `fetch()` calls to CopyFactory URLs (in `strategies.ts`, `copyfactorySync.ts`) must use `copyfactoryFetch` instead.
+- **Never** use `process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"` for this — it's a process-global toggle that leaks into concurrent unrelated HTTPS calls.
 
-**Why NOT undici Agent:** `undici@8.x` (installed by pnpm) requires Node.js 22+. We run Node.js 20.20.0. The `Agent` import crashes at runtime with `webidl.util.markAsUncloneable is not a function`.
+**Why NOT undici Agent:** `undici@8.x` (installed by pnpm) requires Node.js 22+. We run Node.js 20.20.0. The `Agent` import crashes at runtime with `webidl.util.markAsUncloneable is not a function`. Use `node:https` Agent instead.
 
-**How to apply:** This is already implemented in `callMetaApi()` in `artifacts/api-server/src/lib/metaapi.ts`. Do not remove it until MetaApi renews their cert.
+**How to apply:** Import `copyfactoryFetch` from `../lib/metaapi` and use it for every CopyFactory PUT/GET/DELETE. Do not remove until MetaApi renews their cert.
 
 ---
 
@@ -64,9 +54,9 @@ Also: `advanceMasterAccount` returns early when `newStatus === currentStatus` �
 
 ---
 
-## Rule 5: CopyFactory raw fetch calls also need TLS bypass
+## Rule 5: All CopyFactory raw fetch calls must use copyfactoryFetch, never raw fetch
 
-The raw `fetch()` call in `strategies.ts` for CopyFactory strategy creation also hits the CopyFactory domain. Apply the same `NODE_TLS_REJECT_UNAUTHORIZED = "0"` pattern with `finally` restore — NOT just in `callMetaApi`.
+Any direct HTTP call to a CopyFactory domain (`copyfactory-api-v1.*.agiliumtrade.ai`) must use `copyfactoryFetch()` from `metaapi.ts` — never plain `fetch()` and never `NODE_TLS_REJECT_UNAUTHORIZED` toggling. `callMetaApi()` already routes CF URLs internally through `copyfactoryFetch`, so callers using `callMetaApi` are covered. Direct `fetch()` call sites (e.g. strategy create/delete, repair loops) must import and use `copyfactoryFetch` explicitly.
 
 ---
 

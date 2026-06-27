@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { eq, sum, count, desc } from "drizzle-orm";
+import { eq, sum, count, desc, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable, bindingsTable, masterAccountsTable, passwordResetTokensTable, referralsTable, promoCodesTable, customerCareSettingsTable } from "@workspace/db";
 import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "@workspace/api-zod";
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { notifyAccountSuspended, notifyMasterAccountApproved } from "../lib/smsNotifier";
-import { invalidateMetaApiTokenCache, checkAndMarkProviderRole } from "../lib/metaapi";
+import { invalidateMetaApiTokenCache, checkAndMarkProviderRole, ensureSlaveSubscriberRole } from "../lib/metaapi";
 import { syncCopyFactoryStrategies, getLastSyncReport, repairStrategyCopyFactoryIds } from "../lib/copyfactorySync";
 import { getSchedulerStatus, runEnforcementTick, runExpiryWarningTick } from "../lib/scheduler";
 import { runPollerNow, writeAuditLog } from "../lib/accountPoller";
@@ -304,6 +304,51 @@ router.get("/admin/copyfactory-strategies/report", authenticate, requireAdmin, a
 router.post("/admin/copyfactory-strategies/repair", authenticate, requireAdmin, async (_req, res): Promise<void> => {
   try {
     const report = await repairStrategyCopyFactoryIds();
+    res.json({ ok: report.failed === 0, ...report });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: `Repair failed: ${msg}` });
+  }
+});
+
+// Re-register any slave accounts that are missing their CopyFactory subscriber registration.
+// Safe to call any time — ensureSlaveSubscriberRole is idempotent (checks first, registers only if absent).
+router.post("/admin/copyfactory-subscribers/repair", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    const slaves = await db
+      .select({ id: slaveAccountsTable.id, mt5Login: slaveAccountsTable.mt5Login, copyFactorySubscriberId: slaveAccountsTable.copyFactorySubscriberId })
+      .from(slaveAccountsTable)
+      .where(isNotNull(slaveAccountsTable.metaapiAccountId));
+
+    const report: { attempted: number; registered: number; alreadyRegistered: number; failed: number; details: object[] } = {
+      attempted: 0,
+      registered: 0,
+      alreadyRegistered: 0,
+      failed: 0,
+      details: [],
+    };
+
+    for (const slave of slaves) {
+      report.attempted++;
+      const hadId = !!slave.copyFactorySubscriberId;
+      try {
+        const ok = await ensureSlaveSubscriberRole(slave.id);
+        if (hadId) {
+          report.alreadyRegistered++;
+          report.details.push({ slaveId: slave.id, mt5Login: slave.mt5Login, result: "already_registered" });
+        } else if (ok) {
+          report.registered++;
+          report.details.push({ slaveId: slave.id, mt5Login: slave.mt5Login, result: "registered" });
+        } else {
+          report.failed++;
+          report.details.push({ slaveId: slave.id, mt5Login: slave.mt5Login, result: "failed" });
+        }
+      } catch (err) {
+        report.failed++;
+        report.details.push({ slaveId: slave.id, mt5Login: slave.mt5Login, result: "error", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     res.json({ ok: report.failed === 0, ...report });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
