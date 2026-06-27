@@ -1,5 +1,5 @@
 import { eq, isNull } from "drizzle-orm";
-import { db, strategiesTable, masterAccountsTable, usersTable } from "@workspace/db";
+import { db, strategiesTable, masterAccountsTable, usersTable, adminSettingsTable } from "@workspace/db";
 import { getMetaApiToken, callMetaApi, getCopyFactoryApiBase, copyfactoryFetch } from "./metaapi";
 import { logger } from "./logger";
 
@@ -142,6 +142,7 @@ export async function repairStrategyCopyFactoryIds(): Promise<RepairReport> {
             name: strategy.strategyName,
             description: strategy.strategyName,
             accountId: master.metaapiAccountId,
+            positionLifecycle: "hedging",
           }
         );
         if (response.ok) {
@@ -170,6 +171,25 @@ export async function repairStrategyCopyFactoryIds(): Promise<RepairReport> {
     if (repaired) {
       report.repaired++;
       report.details.push({ strategyId: strategy.id, strategyName: strategy.strategyName, result: "repaired" });
+
+      // Auto-populate activeStrategyId if still unset after repair
+      try {
+        const [currentSettings] = await db
+          .select({ id: adminSettingsTable.id, activeStrategyId: adminSettingsTable.activeStrategyId })
+          .from(adminSettingsTable)
+          .orderBy(adminSettingsTable.id)
+          .limit(1);
+
+        if (currentSettings && currentSettings.activeStrategyId == null) {
+          await db
+            .update(adminSettingsTable)
+            .set({ activeStrategyId: strategy.id })
+            .where(eq(adminSettingsTable.id, currentSettings.id));
+          logger.info({ strategyId: strategy.id }, "admin_settings.activeStrategyId auto-populated after strategy repair");
+        }
+      } catch (err) {
+        logger.warn({ err }, "Failed to auto-populate activeStrategyId during repair — non-fatal");
+      }
     } else {
       report.failed++;
       report.details.push({ strategyId: strategy.id, strategyName: strategy.strategyName, result: "failed", error: lastError });

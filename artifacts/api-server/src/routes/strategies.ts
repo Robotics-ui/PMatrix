@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, strategiesTable, masterAccountsTable, bindingsTable, slaveAccountsTable } from "@workspace/db";
+import { db, strategiesTable, masterAccountsTable, bindingsTable, slaveAccountsTable, adminSettingsTable } from "@workspace/db";
 import { CreateStrategyBody, DeleteStrategyParams } from "@workspace/api-zod";
 import { authenticate } from "../middlewares/authenticate";
 import { getMetaApiToken, getCopyFactoryApiBase, syncSlaveSubscriberToCopyFactory, copyfactoryFetch } from "../lib/metaapi";
@@ -144,6 +144,7 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
             name: strategyName,
             description: strategyName,
             accountId: masterAccount.metaapiAccountId,
+            positionLifecycle: "hedging",
           }
         );
         if (response.ok) {
@@ -198,6 +199,25 @@ router.post("/strategies", authenticate, async (req, res): Promise<void> => {
     });
 
     logger.info({ masterAccountId }, "Master account advanced to strategy_created after strategy creation");
+  }
+
+  // Auto-populate activeStrategyId in admin_settings if it is currently unset
+  try {
+    const [currentSettings] = await db
+      .select({ id: adminSettingsTable.id, activeStrategyId: adminSettingsTable.activeStrategyId })
+      .from(adminSettingsTable)
+      .orderBy(adminSettingsTable.id)
+      .limit(1);
+
+    if (currentSettings && currentSettings.activeStrategyId == null) {
+      await db
+        .update(adminSettingsTable)
+        .set({ activeStrategyId: strategy.id })
+        .where(eq(adminSettingsTable.id, currentSettings.id));
+      logger.info({ strategyId: strategy.id }, "admin_settings.activeStrategyId auto-populated after strategy creation");
+    }
+  } catch (err) {
+    logger.warn({ err }, "Failed to auto-populate activeStrategyId — non-fatal");
   }
 
   res.status(201).json(strategy);

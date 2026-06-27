@@ -832,6 +832,143 @@ router.get("/admin/copyfactory-verify", authenticate, requireAdmin, async (_req,
   });
 });
 
+// ─── Full CopyFactory Audit/Health-Check ─────────────────────────────────────
+// GET /admin/copyfactory-audit
+// Returns a PASS/FAIL report for every stage of the CopyFactory pipeline:
+// Master → Provider role → Strategy (with CF ID) → activeStrategyId → Slave → Subscriber → Binding → Sync
+router.get("/admin/copyfactory-audit", authenticate, requireAdmin, async (_req, res): Promise<void> => {
+  const [settings] = await db.select().from(adminSettingsTable).orderBy(adminSettingsTable.id).limit(1);
+  const masters = await db.select().from(masterAccountsTable);
+  const strategies = await db.select().from(strategiesTable);
+  const slaves = await db.select().from(slaveAccountsTable);
+  const subs = await db.select().from(subscriptionsTable);
+  const allBindings = await db.select().from(bindingsTable);
+
+  type CheckResult = { pass: boolean; detail: string };
+  const checks: Record<string, CheckResult> = {};
+
+  // ── 1. At least one connected master ───────────────────────────────────────
+  const connectedMasters = masters.filter((m) => m.status === "connected" || m.status === "synchronizing");
+  checks.masterConnected = {
+    pass: connectedMasters.length > 0,
+    detail: connectedMasters.length > 0
+      ? `${connectedMasters.length} master(s) connected`
+      : `No master accounts in connected/synchronizing state. Total masters: ${masters.length}`,
+  };
+
+  // ── 2. At least one master registered as CopyFactory provider ──────────────
+  const registeredProviders = masters.filter((m) => m.copyFactoryProviderStatus === "registered");
+  checks.providerRegistered = {
+    pass: registeredProviders.length > 0,
+    detail: registeredProviders.length > 0
+      ? `${registeredProviders.length} master(s) registered as CopyFactory provider`
+      : `No master registered as provider. Use Admin > Register Provider.`,
+  };
+
+  // ── 3. At least one active strategy with a CopyFactory strategy ID ─────────
+  const activeWithCfId = strategies.filter((s) => s.status === "active" && s.copyfactoryStrategyId);
+  const activeNoCfId = strategies.filter((s) => s.status === "active" && !s.copyfactoryStrategyId);
+  checks.strategyRegistered = {
+    pass: activeWithCfId.length > 0,
+    detail: activeWithCfId.length > 0
+      ? `${activeWithCfId.length} active strategy(ies) have CopyFactory ID${activeNoCfId.length > 0 ? ` (${activeNoCfId.length} still missing CF ID — repair needed)` : ""}`
+      : `No active strategies with a CopyFactory ID. Create a strategy or run Repair.`,
+  };
+
+  // ── 4. admin_settings.activeStrategyId is populated ────────────────────────
+  const activeStratId = settings?.activeStrategyId ?? null;
+  const activeStrat = activeStratId != null ? strategies.find((s) => s.id === activeStratId) : null;
+  checks.activeStrategySet = {
+    pass: activeStratId != null && activeStrat != null,
+    detail: activeStratId != null && activeStrat != null
+      ? `activeStrategyId=${activeStratId} (${activeStrat.strategyName}, cfId=${activeStrat.copyfactoryStrategyId ?? "MISSING"})`
+      : activeStratId != null
+        ? `activeStrategyId=${activeStratId} set but strategy not found in DB`
+        : `admin_settings.activeStrategyId is NULL — create a strategy to auto-populate it.`,
+  };
+
+  // ── 5. Active strategy's CF ID is consistent ──────────────────────────────
+  checks.activeStrategyCfIdPresent = {
+    pass: activeStrat != null && !!activeStrat.copyfactoryStrategyId,
+    detail: activeStrat?.copyfactoryStrategyId
+      ? `Active strategy CF ID: ${activeStrat.copyfactoryStrategyId}`
+      : `Active strategy is missing copyfactoryStrategyId. Run CopyFactory Repair.`,
+  };
+
+  // ── 6. At least one slave deployed ────────────────────────────────────────
+  const deployedSlaves = slaves.filter((s) => s.metaapiAccountId);
+  checks.slaveDeployed = {
+    pass: deployedSlaves.length > 0,
+    detail: deployedSlaves.length > 0
+      ? `${deployedSlaves.length} slave(s) deployed to MetaApi`
+      : `No slaves have a MetaApi account ID. Slaves must be deployed first.`,
+  };
+
+  // ── 7. All deployed slaves are registered as CopyFactory subscribers ────────
+  const missingSubscriber = deployedSlaves.filter((s) => !s.copyFactorySubscriberId);
+  checks.subscribersRegistered = {
+    pass: deployedSlaves.length > 0 && missingSubscriber.length === 0,
+    detail: missingSubscriber.length === 0
+      ? deployedSlaves.length > 0
+        ? `All ${deployedSlaves.length} slave(s) registered as CopyFactory subscribers`
+        : "No slaves to check"
+      : `${missingSubscriber.length} slave(s) not registered as CopyFactory subscriber. Run Subscribers Repair.`,
+  };
+
+  // ── 8. Slaves with active subscriptions have active bindings ────────────────
+  const activeSubs = subs.filter((s) => s.status === "active" || s.status === "free_trial");
+  const slavesWithSubNoBinding: string[] = [];
+  for (const sub of activeSubs) {
+    const userSlaves = deployedSlaves.filter((s) => s.userId === sub.userId);
+    for (const slave of userSlaves) {
+      const hasBound = allBindings.some((b) => b.slaveAccountId === slave.id && b.status === "active");
+      if (!hasBound) slavesWithSubNoBinding.push(`slave ${slave.mt5Login} (userId=${slave.userId})`);
+    }
+  }
+  checks.bindingsPresent = {
+    pass: slavesWithSubNoBinding.length === 0,
+    detail: slavesWithSubNoBinding.length === 0
+      ? `All active subscribers have at least one active binding`
+      : `Missing bindings: ${slavesWithSubNoBinding.join(", ")}`,
+  };
+
+  // ── 9. Bindings are synced to CopyFactory (lastSyncedAt not null) ──────────
+  const activeBindings = allBindings.filter((b) => b.status === "active");
+  const unsyncedBindings = activeBindings.filter((b) => !b.lastSyncedAt);
+  checks.bindingsSynced = {
+    pass: activeBindings.length > 0 && unsyncedBindings.length === 0,
+    detail: activeBindings.length === 0
+      ? "No active bindings to check"
+      : unsyncedBindings.length === 0
+        ? `All ${activeBindings.length} active binding(s) have been synced to CopyFactory`
+        : `${unsyncedBindings.length} of ${activeBindings.length} active bindings never synced — trigger syncSlaveSubscriberToCopyFactory for affected slaves`,
+  };
+
+  // ── 10. Scheduler/poller running ──────────────────────────────────────────
+  const schedulerStatus = getSchedulerStatus();
+  checks.schedulerRunning = {
+    pass: schedulerStatus.isRunning,
+    detail: schedulerStatus.isRunning
+      ? `Scheduler running — last enforcement: ${schedulerStatus.lastEnforcementAt ?? "never"}`
+      : "Scheduler is not running",
+  };
+
+  const allPass = Object.values(checks).every((c) => c.pass);
+  const failedChecks = Object.entries(checks)
+    .filter(([, c]) => !c.pass)
+    .map(([name, c]) => ({ check: name, detail: c.detail }));
+
+  res.json({
+    generatedAt: new Date().toISOString(),
+    result: allPass ? "PASS" : "FAIL",
+    passCount: Object.values(checks).filter((c) => c.pass).length,
+    failCount: failedChecks.length,
+    totalChecks: Object.keys(checks).length,
+    checks,
+    failures: failedChecks,
+  });
+});
+
 // Admin: update customer care settings
 router.put("/admin/customer-care", authenticate, requireAdmin, async (req, res): Promise<void> => {
   const { phone1, phone2, whatsapp, email, supportHours } = req.body as {

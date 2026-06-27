@@ -483,6 +483,11 @@ export async function syncSlaveSubscriberToCopyFactory(slaveAccountId: number): 
         strategyId: strategy.copyfactoryStrategyId,
         multiplier: parseFloat(binding.riskMultiplier as string),
       });
+    } else {
+      logger.warn(
+        { slaveAccountId, bindingId: binding.id, strategyId: binding.strategyId },
+        "CopyFactory sync: binding skipped — strategy has no copyfactoryStrategyId (repair needed)"
+      );
     }
   }
 
