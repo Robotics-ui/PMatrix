@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   RefreshCw, Activity, CheckCircle2, XCircle, Clock, AlertTriangle,
   RotateCcw, ChevronDown, ChevronUp, Zap, Server, CircleDot,
-  List, Trash2, MessageSquare, Database,
+  List, Trash2, MessageSquare, Database, ChevronLeft, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -913,15 +913,26 @@ export default function WorkersDashboardPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Server className="h-6 w-6 text-blue-400" />
-            Worker Dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor background workers and inspect retry queues.
-          </p>
+        {/* Header */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <a
+            href="/admin"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Admin
+          </a>
+          <span className="text-muted-foreground">/</span>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <Server className="h-6 w-6 text-blue-400" />
+              Worker Dashboard
+            </h1>
+          </div>
         </div>
+        <p className="text-sm text-muted-foreground -mt-3">
+          Monitor background workers and inspect in-memory retry queues — view pending/failed jobs, clear queues, or manually re-trigger retries.
+        </p>
 
         <Tabs defaultValue="workers">
           <TabsList className="mb-4">
@@ -930,8 +941,8 @@ export default function WorkersDashboardPage() {
               Workers
             </TabsTrigger>
             <TabsTrigger value="queues" className="flex items-center gap-1.5">
-              <List className="h-3.5 w-3.5" />
-              Retry Queues
+              <Search className="h-3.5 w-3.5" />
+              Retry Queue Inspector
             </TabsTrigger>
           </TabsList>
 

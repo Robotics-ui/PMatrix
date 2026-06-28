@@ -2494,6 +2494,36 @@ export default function AdminPage() {
 
         <CfPipelineAuditCard />
 
+        {/* Admin Tools Quick Links */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { href: "/admin/master-audit", icon: Database, label: "Audit Trail", desc: "Master lifecycle history", color: "blue" as const },
+            { href: "/admin/workers", icon: Cpu, label: "Worker Dashboard", desc: "Workers & retry queues", color: "green" as const },
+            { href: "/admin/sms", icon: Phone, label: "SMS Admin", desc: "Templates & queue", color: "green" as const },
+            { href: "/admin/faq", icon: List, label: "FAQ Admin", desc: "Manage FAQs", color: "blue" as const },
+          ].map(({ href, icon: Icon, label, desc, color }) => {
+            const colorMap = {
+              blue: "bg-blue-600/10 text-blue-400",
+              green: "bg-green-600/10 text-green-400",
+            } as const;
+            return (
+              <a
+                key={href}
+                href={href}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 hover:bg-muted/30 transition-colors group"
+              >
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${colorMap[color]}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground leading-tight">{label}</p>
+                  <p className="text-xs text-muted-foreground truncate">{desc}</p>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+
         <Tabs defaultValue="approvals" className="space-y-4">
           <TabsList className="bg-muted/50">
             <TabsTrigger value="approvals" className="relative">
