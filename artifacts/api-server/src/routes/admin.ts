@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, inArray, sum, count, asc, desc, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
-import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable, bindingsTable, masterAccountsTable, masterAccountAuditLogsTable, passwordResetTokensTable, referralsTable, promoCodesTable, customerCareSettingsTable, smsQueueTable } from "@workspace/db";
+import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable, bindingsTable, masterAccountsTable, masterAccountAuditLogsTable, passwordResetTokensTable, referralsTable, promoCodesTable, customerCareSettingsTable, smsQueueTable, tradeLogsTable } from "@workspace/db";
 import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "@workspace/api-zod";
 import { authenticate, requireAdmin } from "../middlewares/authenticate";
 import { notifyAccountSuspended, notifyMasterAccountApproved } from "../lib/smsNotifier";
@@ -980,6 +980,42 @@ router.get("/admin/copyfactory-audit", authenticate, requireAdmin, async (_req, 
     checks,
     failures: failedChecks,
   });
+});
+
+// GET /admin/trade-pl — daily P/L aggregation from trade_logs (last 30 days)
+router.get("/admin/trade-pl", authenticate, requireAdmin, async (req, res): Promise<void> => {
+  const daysParam = parseInt(String(req.query.days ?? "30"), 10);
+  const days = isNaN(daysParam) || daysParam < 1 ? 30 : Math.min(daysParam, 365);
+
+  const result = await db.execute(sql`
+    SELECT
+      DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date::text AS day,
+      COALESCE(SUM(profit::numeric), 0)                            AS total_profit,
+      COUNT(*)                                                      AS total_trades,
+      COUNT(*) FILTER (WHERE profit::numeric > 0)                  AS wins,
+      COUNT(*) FILTER (WHERE profit::numeric < 0)                  AS losses
+    FROM   ${tradeLogsTable}
+    WHERE  created_at >= NOW() - (${days} || ' days')::interval
+      AND  profit IS NOT NULL
+    GROUP  BY 1
+    ORDER  BY 1 ASC
+  `);
+
+  type Row = { day: string; total_profit: string; total_trades: string; wins: string; losses: string };
+  const dailyRows = ((result as unknown as { rows: Row[] }).rows ?? []).map((r) => ({
+    date: r.day,
+    profit: parseFloat(r.total_profit),
+    trades: parseInt(r.total_trades, 10),
+    wins: parseInt(r.wins, 10),
+    losses: parseInt(r.losses, 10),
+  }));
+
+  const totalProfit  = dailyRows.reduce((s, r) => s + r.profit, 0);
+  const totalTrades  = dailyRows.reduce((s, r) => s + r.trades, 0);
+  const totalWins    = dailyRows.reduce((s, r) => s + r.wins, 0);
+  const winRate      = totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0;
+
+  res.json({ days, dailyRows, totalProfit, totalTrades, totalWins, winRate });
 });
 
 // Admin: get all worker statuses

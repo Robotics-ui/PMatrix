@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   CheckCircle2, XCircle, RefreshCw, ChevronLeft, Activity,
   Wifi, ShieldCheck, Zap, Link2, Users, Server, Clock,
-  AlertTriangle, Database, Radio, Loader2,
+  AlertTriangle, Database, Radio, Loader2, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,22 +56,88 @@ type IntegrationStatus = {
   mode: "live" | "demo";
 };
 
-// ── Check metadata ─────────────────────────────────────────────────────────────
+// ── Check metadata (icon + group + fix-it link) ────────────────────────────────
 
 const CHECK_META: Record<
   keyof CfAuditData["checks"],
-  { label: string; icon: React.ComponentType<{ className?: string }>; group: string }
+  {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    group: string;
+    fixHref: string;
+    fixLabel: string;
+  }
 > = {
-  masterConnected:         { label: "Master Connected",        icon: Wifi,         group: "Accounts" },
-  providerRegistered:      { label: "Provider Registered",     icon: ShieldCheck,  group: "Accounts" },
-  strategyRegistered:      { label: "Strategy Has CF ID",      icon: Database,     group: "Strategy" },
-  activeStrategySet:       { label: "Active Strategy Set",     icon: Zap,          group: "Strategy" },
-  activeStrategyCfIdPresent:{ label: "Active Strategy CF ID",  icon: Radio,        group: "Strategy" },
-  slaveDeployed:           { label: "Slave Deployed",          icon: Server,       group: "Slaves" },
-  subscribersRegistered:   { label: "Subscribers Registered",  icon: Users,        group: "Slaves" },
-  bindingsPresent:         { label: "Bindings Present",        icon: Link2,        group: "Bindings" },
-  bindingsSynced:          { label: "Bindings Synced to CF",   icon: Activity,     group: "Bindings" },
-  schedulerRunning:        { label: "Scheduler Running",       icon: Clock,        group: "Workers" },
+  masterConnected: {
+    label: "Master Connected",
+    icon: Wifi,
+    group: "Accounts",
+    fixHref: "/admin/diagnostics",
+    fixLabel: "View Master Details",
+  },
+  providerRegistered: {
+    label: "Provider Registered",
+    icon: ShieldCheck,
+    group: "Accounts",
+    fixHref: "/admin/master-audit",
+    fixLabel: "Register Provider",
+  },
+  strategyRegistered: {
+    label: "Strategy Has CF ID",
+    icon: Database,
+    group: "Strategy",
+    fixHref: "/admin?tab=strategies",
+    fixLabel: "Manage Strategies",
+  },
+  activeStrategySet: {
+    label: "Active Strategy Set",
+    icon: Zap,
+    group: "Strategy",
+    fixHref: "/admin?tab=strategies",
+    fixLabel: "Manage Strategies",
+  },
+  activeStrategyCfIdPresent: {
+    label: "Active Strategy CF ID",
+    icon: Radio,
+    group: "Strategy",
+    fixHref: "/admin?tab=strategies",
+    fixLabel: "Manage Strategies",
+  },
+  slaveDeployed: {
+    label: "Slave Deployed",
+    icon: Server,
+    group: "Slaves",
+    fixHref: "/slave-accounts",
+    fixLabel: "Deploy Slave Account",
+  },
+  subscribersRegistered: {
+    label: "Subscribers Registered",
+    icon: Users,
+    group: "Slaves",
+    fixHref: "/admin?tab=cf-subscribers",
+    fixLabel: "CF Subscribers",
+  },
+  bindingsPresent: {
+    label: "Bindings Present",
+    icon: Link2,
+    group: "Bindings",
+    fixHref: "/bindings",
+    fixLabel: "Create Binding",
+  },
+  bindingsSynced: {
+    label: "Bindings Synced to CF",
+    icon: Activity,
+    group: "Bindings",
+    fixHref: "/bindings",
+    fixLabel: "View Bindings",
+  },
+  schedulerRunning: {
+    label: "Scheduler Running",
+    icon: Clock,
+    group: "Workers",
+    fixHref: "/admin/workers",
+    fixLabel: "Worker Dashboard",
+  },
 };
 
 const CHECK_ORDER: (keyof CfAuditData["checks"])[] = [
@@ -141,6 +207,16 @@ function CheckCard({
           )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{result.detail}</p>
+        {/* Fix It button — only shown when failing */}
+        {!result.pass && (
+          <a
+            href={meta.fixHref}
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-colors group"
+          >
+            {meta.fixLabel}
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </a>
+        )}
       </div>
     </div>
   );
@@ -194,13 +270,13 @@ function IntegrationStatusCard({ data }: { data: IntegrationStatus }) {
     data.mpesa.callbackUrl;
 
   const rows: { label: string; ok: boolean }[] = [
-    { label: "MetaApi Token",     ok: data.metaapi.token },
-    { label: "M-Pesa Consumer Key",   ok: data.mpesa.consumerKey },
-    { label: "M-Pesa Consumer Secret",ok: data.mpesa.consumerSecret },
-    { label: "M-Pesa Passkey",        ok: data.mpesa.passkey },
-    { label: "M-Pesa Shortcode",      ok: data.mpesa.shortcode },
-    { label: "M-Pesa Callback URL",   ok: data.mpesa.callbackUrl },
-    { label: "Webhook Secret",        ok: data.webhook.secret },
+    { label: "MetaApi Token",            ok: data.metaapi.token },
+    { label: "M-Pesa Consumer Key",      ok: data.mpesa.consumerKey },
+    { label: "M-Pesa Consumer Secret",   ok: data.mpesa.consumerSecret },
+    { label: "M-Pesa Passkey",           ok: data.mpesa.passkey },
+    { label: "M-Pesa Shortcode",         ok: data.mpesa.shortcode },
+    { label: "M-Pesa Callback URL",      ok: data.mpesa.callbackUrl },
+    { label: "Webhook Secret",           ok: data.webhook.secret },
   ];
 
   return (
@@ -447,20 +523,31 @@ export default function AdminHealthPage() {
                 result={cfAudit.result}
               />
               {cfAudit.failures.length > 0 && (
-                <div className="pt-1 space-y-1">
+                <div className="pt-1 space-y-1.5">
                   <p className="text-xs font-medium text-red-400">Failing checks:</p>
-                  {cfAudit.failures.map((f) => (
-                    <div key={f.check} className="flex items-start gap-1.5 text-xs">
-                      <XCircle className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
-                      <span>
-                        <span className="text-foreground font-medium">
-                          {CHECK_META[f.check as keyof CfAuditData["checks"]]?.label ?? f.check}
+                  {cfAudit.failures.map((f) => {
+                    const meta = CHECK_META[f.check as keyof CfAuditData["checks"]];
+                    return (
+                      <div key={f.check} className="flex items-start gap-1.5 text-xs">
+                        <XCircle className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                        <span>
+                          <span className="text-foreground font-medium">
+                            {meta?.label ?? f.check}
+                          </span>
+                          {" — "}
+                          <span className="text-muted-foreground">{f.detail}</span>
+                          {meta && (
+                            <a
+                              href={meta.fixHref}
+                              className="ml-1.5 inline-flex items-center gap-0.5 text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                              {meta.fixLabel} <ArrowRight className="h-2.5 w-2.5" />
+                            </a>
+                          )}
                         </span>
-                        {" — "}
-                        <span className="text-muted-foreground">{f.detail}</span>
-                      </span>
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

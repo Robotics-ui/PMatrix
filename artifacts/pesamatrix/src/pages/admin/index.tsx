@@ -1,4 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
+  ResponsiveContainer, ReferenceLine, Cell,
+} from "recharts";
 import { CfSubscribersTab } from "./CfSubscribersTab";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useAuth } from "@/hooks/use-auth";
@@ -2366,6 +2370,159 @@ function CopyFactoryStrategiesTab() {
   );
 }
 
+// ── Daily P/L Chart ───────────────────────────────────────────────────────────
+
+type PlRow = { date: string; profit: number; trades: number; wins: number; losses: number };
+type PlData = { days: number; dailyRows: PlRow[]; totalProfit: number; totalTrades: number; totalWins: number; winRate: number };
+
+function DailyPlChartCard() {
+  const { token } = useAuth();
+  const [data, setData] = useState<PlData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [windowDays, setWindowDays] = useState<30 | 90>(30);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchPl = useCallback(async (days: number, silent = false) => {
+    if (!token) return;
+    if (!silent) setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/trade-pl?days=${days}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setData(await res.json() as PlData);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => {
+    fetchPl(windowDays);
+    intervalRef.current = setInterval(() => fetchPl(windowDays, true), 60_000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchPl, windowDays]);
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { style: "currency", currency: "KES", maximumFractionDigits: 0 });
+
+  const rows = data?.dailyRows ?? [];
+  const maxAbs = rows.length ? Math.max(...rows.map((r) => Math.abs(r.profit)), 1) : 1;
+
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
+    if (!active || !payload?.length) return null;
+    const row = rows.find((r) => r.date === label);
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-lg">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        <p className={payload[0].value >= 0 ? "text-green-400" : "text-red-400"}>
+          P/L: {fmt(payload[0].value)}
+        </p>
+        {row && (
+          <>
+            <p className="text-muted-foreground">Trades: {row.trades}</p>
+            <p className="text-muted-foreground">W/L: {row.wins}/{row.losses}</p>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-green-400" />
+            Daily Trade P/L
+          </CardTitle>
+          <div className="flex items-center gap-1.5">
+            {([30, 90] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setWindowDays(d)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs transition-colors",
+                  windowDays === d
+                    ? "bg-blue-600 text-white"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                )}
+              >
+                {d}d
+              </button>
+            ))}
+            <button
+              onClick={() => fetchPl(windowDays)}
+              disabled={loading}
+              className="ml-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Summary stats */}
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            {
+              label: "Total P/L",
+              value: data ? fmt(data.totalProfit) : "—",
+              color: data && data.totalProfit >= 0 ? "text-green-400" : "text-red-400",
+            },
+            { label: "Total Trades", value: data ? String(data.totalTrades) : "—", color: "text-foreground" },
+            { label: "Win Rate",     value: data ? `${data.winRate}%` : "—", color: data && data.winRate >= 50 ? "text-green-400" : "text-yellow-400" },
+            { label: "Winning Days", value: data ? String(rows.filter((r) => r.profit > 0).length) : "—", color: "text-foreground" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">{label}</p>
+              <p className={cn("text-sm font-semibold mt-0.5 truncate", color)}>{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Bar chart */}
+        {loading ? (
+          <div className="h-40 rounded-lg bg-muted/20 animate-pulse" />
+        ) : rows.length === 0 ? (
+          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+            No trade data yet — P/L will appear here once copy-trades are logged.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: string) => {
+                  const d = new Date(v);
+                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                }}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                domain={[-maxAbs * 1.1, maxAbs * 1.1]}
+                tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
+                width={36}
+              />
+              <RechartTooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--muted)/0.3)" }} />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+              <Bar dataKey="profit" radius={[2, 2, 0, 0]} maxBarSize={24}>
+                {rows.map((r, i) => (
+                  <Cell key={i} fill={r.profit >= 0 ? "#16a34a" : "#dc2626"} fillOpacity={0.8} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -2494,6 +2651,8 @@ export default function AdminPage() {
 
         <CfPipelineAuditCard />
 
+        <DailyPlChartCard />
+
         {/* Admin Tools Quick Links */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
@@ -2525,7 +2684,7 @@ export default function AdminPage() {
           })}
         </div>
 
-        <Tabs defaultValue="approvals" className="space-y-4">
+        <Tabs defaultValue={new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("tab") ?? "approvals"} className="space-y-4">
           <TabsList className="bg-muted/50">
             <TabsTrigger value="approvals" className="relative">
               Approvals
