@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, sum, count, asc, desc, isNotNull, sql } from "drizzle-orm";
+import { eq, inArray, sum, count, asc, desc, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { db, usersTable, subscriptionsTable, paymentsTable, slaveAccountsTable, strategiesTable, adminSettingsTable, bindingsTable, masterAccountsTable, masterAccountAuditLogsTable, passwordResetTokensTable, referralsTable, promoCodesTable, customerCareSettingsTable, smsQueueTable } from "@workspace/db";
 import { SuspendUserParams, ActivateUserParams, UpdateAdminSettingsBody } from "@workspace/api-zod";
@@ -1105,7 +1105,7 @@ router.get("/admin/master-audit/:masterAccountId", authenticate, requireAdmin, a
   const adminIds = [...new Set(logs.map((l) => l.adminId).filter((id): id is number => id !== null))];
   let adminMap = new Map<number, string>();
   if (adminIds.length > 0) {
-    const admins = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, adminIds[0]));
+    const admins = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(inArray(usersTable.id, adminIds));
     adminMap = new Map(admins.map((a) => [a.id, a.email]));
   }
 
