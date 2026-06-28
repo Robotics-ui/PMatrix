@@ -947,12 +947,21 @@ router.get("/admin/copyfactory-audit", authenticate, requireAdmin, async (_req, 
   };
 
   // ── 10. Scheduler/poller running ──────────────────────────────────────────
-  const schedulerStatus = getSchedulerStatus();
+  const allWorkers = getAllWorkers();
+  const schedulerWorker = allWorkers.find((w) => w.id === "subscription-scheduler");
+  const schedulerHealthy =
+    schedulerWorker != null &&
+    schedulerWorker.status !== "failed" &&
+    !schedulerWorker.isStale;
   checks.schedulerRunning = {
-    pass: schedulerStatus.isRunning,
-    detail: schedulerStatus.isRunning
-      ? `Scheduler running — last enforcement: ${schedulerStatus.lastEnforcementAt ?? "never"}`
-      : "Scheduler is not running",
+    pass: schedulerHealthy,
+    detail: schedulerHealthy
+      ? `Scheduler healthy — last job: ${schedulerWorker!.lastJobCompletedAt ?? "pending first run"}`
+      : schedulerWorker == null
+        ? "Scheduler worker not registered (server may still be starting up)"
+        : schedulerWorker.status === "failed"
+          ? `Scheduler worker failed after ${schedulerWorker.consecutiveFailures} consecutive errors — check Worker Dashboard`
+          : `Scheduler worker is stale — last job: ${schedulerWorker.lastJobCompletedAt ?? "never"}`,
   };
 
   const allPass = Object.values(checks).every((c) => c.pass);
