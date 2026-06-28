@@ -2495,12 +2495,13 @@ export default function AdminPage() {
         <CfPipelineAuditCard />
 
         {/* Admin Tools Quick Links */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { href: "/admin/master-audit", icon: Database, label: "Audit Trail", desc: "Master lifecycle history", color: "blue" as const },
-            { href: "/admin/workers", icon: Cpu, label: "Worker Dashboard", desc: "Workers & retry queues", color: "green" as const },
-            { href: "/admin/sms", icon: Phone, label: "SMS Admin", desc: "Templates & queue", color: "green" as const },
-            { href: "/admin/faq", icon: List, label: "FAQ Admin", desc: "Manage FAQs", color: "blue" as const },
+            { href: "/admin/health",       icon: Activity, label: "Health Check",    desc: "Live endpoint status",      color: "green" as const },
+            { href: "/admin/master-audit", icon: Database, label: "Audit Trail",     desc: "Master lifecycle history",  color: "blue" as const },
+            { href: "/admin/workers",      icon: Cpu,      label: "Worker Dashboard",desc: "Workers & retry queues",    color: "blue" as const },
+            { href: "/admin/sms",          icon: Phone,    label: "SMS Admin",       desc: "Templates & queue",         color: "green" as const },
+            { href: "/admin/faq",          icon: List,     label: "FAQ Admin",       desc: "Manage FAQs",               color: "blue" as const },
           ].map(({ href, icon: Icon, label, desc, color }) => {
             const colorMap = {
               blue: "bg-blue-600/10 text-blue-400",

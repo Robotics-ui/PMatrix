@@ -37,6 +37,7 @@ import FaqPage from "@/pages/faq";
 import AdminFaqPage from "@/pages/admin/faq-admin";
 import WorkersDashboardPage from "@/pages/admin/workers-dashboard";
 import MasterAuditPage from "@/pages/admin/master-audit";
+import AdminHealthPage from "@/pages/admin/health";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,7 @@ function Router() {
       <Route path="/admin/faq" component={AdminFaqPage} />
       <Route path="/admin/workers" component={WorkersDashboardPage} />
       <Route path="/admin/master-audit" component={MasterAuditPage} />
+      <Route path="/admin/health" component={AdminHealthPage} />
       <Route path="/about" component={AboutPage} />
       <Route path="/contacts" component={ContactsPage} />
       <Route component={NotFound} />
